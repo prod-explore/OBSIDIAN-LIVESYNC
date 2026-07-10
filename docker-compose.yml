@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  couchdb:
+    image: couchdb:latest
+    container_name: obsidian-couchdb
+    restart: unless-stopped
+    environment:
+      # Pamiętaj o zmianie hasła przed wdrożeniem!
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=secret_password
+    volumes:
+      - ./data:/opt/couchdb/data
+      - ./local.ini:/opt/couchdb/etc/local.d/obsidian.ini
+    networks:
+      - obsidian
+
+networks:
+  obsidian:
+    external: true
