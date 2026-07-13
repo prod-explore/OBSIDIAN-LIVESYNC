@@ -27,6 +27,11 @@ app.use(cors());
 
 // Auth middleware
 app.use((req, res, next) => {
+  // Allow messages path validation to happen in its own controller
+  if (req.path.startsWith('/mcp/messages/')) {
+    return next();
+  }
+
   let token = req.query.token as string | undefined;
   
   if (!token) {
@@ -166,13 +171,20 @@ let transport: SSEServerTransport;
 
 // Endpoint for SSE connection
 app.get('/mcp/sse', async (req, res) => {
+  const token = (req.query.token as string) || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : undefined);
   console.log('New SSE connection established');
-  transport = new SSEServerTransport('/mcp/messages', res);
+  transport = new SSEServerTransport(`/mcp/messages/${token}`, res);
   await server.connect(transport);
 });
 
-// Endpoint for receiving messages
-app.post('/mcp/messages', async (req, res) => {
+// Endpoint for receiving messages with path token
+app.post('/mcp/messages/:token', async (req, res) => {
+  const token = req.params.token;
+  if (token !== API_KEY) {
+    res.status(403).json({ error: 'Forbidden: Invalid API Key' });
+    return;
+  }
+
   if (!transport) {
     res.status(400).send('No active SSE connection');
     return;
