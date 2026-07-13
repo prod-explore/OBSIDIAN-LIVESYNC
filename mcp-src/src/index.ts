@@ -27,13 +27,20 @@ app.use(cors());
 
 // Auth middleware
 app.use((req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Unauthorized: Missing or invalid Bearer token' });
+  let token = req.query.token as string | undefined;
+  
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
+  }
+  
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
     return;
   }
   
-  const token = authHeader.split(' ')[1];
   if (token !== API_KEY) {
     res.status(403).json({ error: 'Forbidden: Invalid API Key' });
     return;
