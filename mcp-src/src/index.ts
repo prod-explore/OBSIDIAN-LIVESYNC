@@ -56,12 +56,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Setup MCP Server
-const server = new McpServer({
-  name: 'Obsidian Headless MCP',
-  version: '1.0.0',
-});
-
 // Utility to safely resolve paths inside the vault
 function resolveVaultPath(relativePath: string): string {
   // Bulletproof directory traversal prevention
@@ -72,117 +66,139 @@ function resolveVaultPath(relativePath: string): string {
   return resolvedPath;
 }
 
-// Tool: read_note
-server.tool(
-  'read_note',
-  'Reads the content of a markdown note from the Obsidian vault.',
-  {
-    path: z.string().describe('Path to the note relative to the vault root (e.g., "Folder/My Note.md")'),
-  },
-  async ({ path: notePath }) => {
-    try {
-      const fullPath = resolveVaultPath(notePath);
-      const content = await fs.readFile(fullPath, 'utf-8');
-      return {
-        content: [{ type: 'text', text: content }],
-      };
-    } catch (err: any) {
-      return {
-        content: [{ type: 'text', text: `Error reading note: ${err.message}` }],
-        isError: true,
-      };
-    }
-  }
-);
+// Setup MCP Server Factory to support multiple concurrent connections (one server instance per transport)
+function createMcpServer(): McpServer {
+  const server = new McpServer({
+    name: 'Obsidian Headless MCP',
+    version: '1.0.0',
+  });
 
-// Tool: write_note
-server.tool(
-  'write_note',
-  'Writes or overwrites a markdown note in the Obsidian vault.',
-  {
-    path: z.string().describe('Path to the note relative to the vault root (e.g., "Folder/My Note.md")'),
-    content: z.string().describe('The markdown content to write to the note'),
-  },
-  async ({ path: notePath, content }) => {
-    try {
-      const fullPath = resolveVaultPath(notePath);
-      // Ensure directory exists
-      await fs.mkdir(path.dirname(fullPath), { recursive: true });
-      await fs.writeFile(fullPath, content, 'utf-8');
-      return {
-        content: [{ type: 'text', text: `Successfully wrote note to ${notePath}` }],
-      };
-    } catch (err: any) {
-      return {
-        content: [{ type: 'text', text: `Error writing note: ${err.message}` }],
-        isError: true,
-      };
+  // Tool: read_note
+  server.tool(
+    'read_note',
+    'Reads the content of a markdown note from the Obsidian vault.',
+    {
+      path: z.string().describe('Path to the note relative to the vault root (e.g., "Folder/My Note.md")'),
+    },
+    async ({ path: notePath }) => {
+      try {
+        const fullPath = resolveVaultPath(notePath);
+        const content = await fs.readFile(fullPath, 'utf-8');
+        return {
+          content: [{ type: 'text', text: content }],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Error reading note: ${err.message}` }],
+          isError: true,
+        };
+      }
     }
-  }
-);
+  );
 
-// Tool: search_notes
-server.tool(
-  'search_notes',
-  'Searches for notes containing a specific keyword or phrase.',
-  {
-    query: z.string().describe('The keyword or phrase to search for'),
-  },
-  async ({ query }) => {
-    try {
-      const results: string[] = [];
-      
-      async function walkDir(dir: string) {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const res = path.resolve(dir, entry.name);
-          // Skip .obsidian and hidden folders
-          if (entry.name.startsWith('.')) continue;
-          
-          if (entry.isDirectory()) {
-            await walkDir(res);
-          } else if (entry.name.endsWith('.md')) {
-            try {
-              const content = await fs.readFile(res, 'utf-8');
-              if (content.toLowerCase().includes(query.toLowerCase()) || entry.name.toLowerCase().includes(query.toLowerCase())) {
-                results.push(path.relative(VAULT_PATH, res));
+  // Tool: write_note
+  server.tool(
+    'write_note',
+    'Writes or overwrites a markdown note in the Obsidian vault.',
+    {
+      path: z.string().describe('Path to the note relative to the vault root (e.g., "Folder/My Note.md")'),
+      content: z.string().describe('The markdown content to write to the note'),
+    },
+    async ({ path: notePath, content }) => {
+      try {
+        const fullPath = resolveVaultPath(notePath);
+        // Ensure directory exists
+        await fs.mkdir(path.dirname(fullPath), { recursive: true });
+        await fs.writeFile(fullPath, content, 'utf-8');
+        return {
+          content: [{ type: 'text', text: `Successfully wrote note to ${notePath}` }],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Error writing note: ${err.message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool: search_notes
+  server.tool(
+    'search_notes',
+    'Searches for notes containing a specific keyword or phrase.',
+    {
+      query: z.string().describe('The keyword or phrase to search for'),
+    },
+    async ({ query }) => {
+      try {
+        const results: string[] = [];
+        
+        async function walkDir(dir: string) {
+          const entries = await fs.readdir(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            const res = path.resolve(dir, entry.name);
+            // Skip .obsidian and hidden folders
+            if (entry.name.startsWith('.')) continue;
+            
+            if (entry.isDirectory()) {
+              await walkDir(res);
+            } else if (entry.name.endsWith('.md')) {
+              try {
+                const content = await fs.readFile(res, 'utf-8');
+                if (content.toLowerCase().includes(query.toLowerCase()) || entry.name.toLowerCase().includes(query.toLowerCase())) {
+                  results.push(path.relative(VAULT_PATH, res));
+                }
+              } catch (e) {
+                 // ignore unreadable files
               }
-            } catch (e) {
-               // ignore unreadable files
             }
           }
         }
+        
+        await walkDir(VAULT_PATH);
+        
+        return {
+          content: [{ type: 'text', text: results.length > 0 ? `Found ${results.length} notes matching "${query}":\n\n${results.join('\n')}` : `No notes found matching "${query}".` }],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Error searching notes: ${err.message}` }],
+          isError: true,
+        };
       }
-      
-      await walkDir(VAULT_PATH);
-      
-      return {
-        content: [{ type: 'text', text: results.length > 0 ? `Found ${results.length} notes matching "${query}":\n\n${results.join('\n')}` : `No notes found matching "${query}".` }],
-      };
-    } catch (err: any) {
-      return {
-        content: [{ type: 'text', text: `Error searching notes: ${err.message}` }],
-        isError: true,
-      };
     }
-  }
-);
+  );
 
-// Map to store active transports by session ID
-const transports = new Map<string, SSEServerTransport>();
+  return server;
+}
+
+// Session interface to link transport and its dedicated server
+interface Session {
+  transport: SSEServerTransport;
+  server: McpServer;
+}
+
+// Map to store active transports and servers by session ID
+const transports = new Map<string, Session>();
 
 // Endpoint for SSE connection
 app.get('/mcp/sse', async (req, res) => {
   console.log('New SSE connection established');
   const transport = new SSEServerTransport('/mcp/messages', res);
+  const connectionServer = createMcpServer();
   
-  await server.connect(transport);
+  await connectionServer.connect(transport);
   
-  transports.set(transport.sessionId, transport);
+  transports.set(transport.sessionId, { transport, server: connectionServer });
   
-  res.on('close', () => {
+  res.on('close', async () => {
     console.log(`SSE connection closed for session ${transport.sessionId}`);
     transports.delete(transport.sessionId);
+    try {
+      await connectionServer.close();
+    } catch (err) {
+      console.error('Error closing MCP server session:', err);
+    }
   });
 });
 
@@ -194,13 +210,13 @@ app.post('/mcp/messages', async (req, res) => {
     return;
   }
 
-  const transport = transports.get(sessionId);
-  if (!transport) {
+  const session = transports.get(sessionId);
+  if (!session) {
     res.status(404).send('Session not found');
     return;
   }
 
-  await transport.handlePostMessage(req, res);
+  await session.transport.handlePostMessage(req, res);
 });
 
 // Basic health check
