@@ -1,0 +1,27 @@
+# Environment variables and secrets
+.env
+
+# Node.js & TypeScript
+node_modules/
+dist/
+npm-debug.log*
+
+# IDEs and workspace settings
+.vscode/
+.idea/
+.cursor/
+*.code-workspace
+
+# Local agent configurations (contains secrets/tokens)
+.agents/
+
+# Docker volumes & local data
+data/
+config/
+vault/
+
+# Logs
+*.log
+*.log.*
+
+
