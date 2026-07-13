@@ -27,9 +27,10 @@ app.use(cors());
 app.use(express.json());
 
 // Auth middleware
+// Auth middleware
 app.use((req, res, next) => {
-  // Allow messages path validation to happen in its own controller
-  if (req.path.startsWith('/mcp/messages/')) {
+  // Allow messages path if it has a valid sessionId (auth is already proven by the GET request that spawned the session)
+  if (req.path === '/mcp/messages' && req.query.sessionId) {
     return next();
   }
 
@@ -167,29 +168,38 @@ server.tool(
   }
 );
 
-// Global transport variable to keep track of SSE connection
-let transport: SSEServerTransport;
+// Map to store active transports by session ID
+const transports = new Map<string, SSEServerTransport>();
 
 // Endpoint for SSE connection
 app.get('/mcp/sse', async (req, res) => {
-  const token = (req.query.token as string) || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : undefined);
   console.log('New SSE connection established');
-  transport = new SSEServerTransport(`/mcp/messages/${token}`, res);
+  const transport = new SSEServerTransport('/mcp/messages', res);
+  
   await server.connect(transport);
+  
+  transports.set(transport.sessionId, transport);
+  
+  res.on('close', () => {
+    console.log(`SSE connection closed for session ${transport.sessionId}`);
+    transports.delete(transport.sessionId);
+  });
 });
 
-// Endpoint for receiving messages with path token
-app.post('/mcp/messages/:token', async (req, res) => {
-  const token = req.params.token;
-  if (token !== API_KEY) {
-    res.status(403).json({ error: 'Forbidden: Invalid API Key' });
+// Endpoint for receiving messages
+app.post('/mcp/messages', async (req, res) => {
+  const sessionId = req.query.sessionId as string;
+  if (!sessionId) {
+    res.status(400).send('Missing sessionId');
     return;
   }
 
+  const transport = transports.get(sessionId);
   if (!transport) {
-    res.status(400).send('No active SSE connection');
+    res.status(404).send('Session not found');
     return;
   }
+
   await transport.handlePostMessage(req, res);
 });
 
