@@ -2,10 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as os from 'os';
 
 // Configuration
 const PORT = process.env.PORT || 3000;
@@ -26,36 +26,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Auth middleware
-// Auth middleware
-app.use((req, res, next) => {
-  // Allow messages path if it has a valid sessionId (auth is already proven by the GET request that spawned the session)
-  if (req.path === '/mcp/messages' && req.query.sessionId) {
-    return next();
-  }
-
-  let token = req.query.token as string | undefined;
-  
-  if (!token) {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.split(' ')[1];
-    }
-  }
-  
-  if (!token) {
-    res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
-    return;
-  }
-  
-  if (token !== API_KEY) {
-    res.status(403).json({ error: 'Forbidden: Invalid API Key' });
-    return;
-  }
-  
-  next();
-});
-
 // Utility to safely resolve paths inside the vault
 function resolveVaultPath(relativePath: string): string {
   // Bulletproof directory traversal prevention
@@ -66,7 +36,7 @@ function resolveVaultPath(relativePath: string): string {
   return resolvedPath;
 }
 
-// Setup MCP Server Factory to support multiple concurrent connections (one server instance per transport)
+// MCP Server Factory — creates a fresh server instance per connection
 function createMcpServer(): McpServer {
   const server = new McpServer({
     name: 'Obsidian Headless MCP',
@@ -107,7 +77,6 @@ function createMcpServer(): McpServer {
     async ({ path: notePath, content }) => {
       try {
         const fullPath = resolveVaultPath(notePath);
-        // Ensure directory exists
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
         await fs.writeFile(fullPath, content, 'utf-8');
         return {
@@ -137,7 +106,6 @@ function createMcpServer(): McpServer {
           const entries = await fs.readdir(dir, { withFileTypes: true });
           for (const entry of entries) {
             const res = path.resolve(dir, entry.name);
-            // Skip .obsidian and hidden folders
             if (entry.name.startsWith('.')) continue;
             
             if (entry.isDirectory()) {
@@ -149,7 +117,7 @@ function createMcpServer(): McpServer {
                   results.push(path.relative(VAULT_PATH, res));
                 }
               } catch (e) {
-                 // ignore unreadable files
+                // ignore unreadable files
               }
             }
           }
@@ -172,37 +140,79 @@ function createMcpServer(): McpServer {
   return server;
 }
 
-// Session interface to link transport and its dedicated server
-interface Session {
+// ─── Auth helper ────────────────────────────────────────────────────────────
+function extractToken(req: express.Request): string | undefined {
+  const fromQuery = req.query.token as string | undefined;
+  if (fromQuery) return fromQuery;
+
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.split(' ')[1];
+  }
+  return undefined;
+}
+
+function requireAuth(req: express.Request, res: express.Response): boolean {
+  const token = extractToken(req);
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized: Missing token' });
+    return false;
+  }
+  if (token !== API_KEY) {
+    res.status(403).json({ error: 'Forbidden: Invalid API Key' });
+    return false;
+  }
+  return true;
+}
+
+// ─── Streamable HTTP transport (new protocol, used by Antigravity) ──────────
+// Stateless: each POST creates a fresh server+transport, handles, and cleans up
+app.post('/mcp/sse', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+
+  try {
+    const server = createMcpServer();
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+
+    res.on('close', () => {
+      transport.close().catch(() => {});
+      server.close().catch(() => {});
+    });
+
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (err: any) {
+    console.error('Streamable HTTP error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+});
+
+// ─── Legacy SSE transport (old protocol, used by Claude Desktop) ────────────
+interface SseSession {
   transport: SSEServerTransport;
   server: McpServer;
 }
+const sseSessions = new Map<string, SseSession>();
 
-// Map to store active transports and servers by session ID
-const transports = new Map<string, Session>();
-
-// Endpoint for SSE connection
 app.get('/mcp/sse', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+
   console.log('New SSE connection established');
   const transport = new SSEServerTransport('/mcp/messages', res);
   const connectionServer = createMcpServer();
-  
+
   await connectionServer.connect(transport);
-  
-  transports.set(transport.sessionId, { transport, server: connectionServer });
-  
+  sseSessions.set(transport.sessionId, { transport, server: connectionServer });
+
   res.on('close', async () => {
     console.log(`SSE connection closed for session ${transport.sessionId}`);
-    transports.delete(transport.sessionId);
-    try {
-      await connectionServer.close();
-    } catch (err) {
-      console.error('Error closing MCP server session:', err);
-    }
+    sseSessions.delete(transport.sessionId);
+    try { await connectionServer.close(); } catch {}
   });
 });
 
-// Endpoint for receiving messages
 app.post('/mcp/messages', async (req, res) => {
   const sessionId = req.query.sessionId as string;
   if (!sessionId) {
@@ -210,7 +220,7 @@ app.post('/mcp/messages', async (req, res) => {
     return;
   }
 
-  const session = transports.get(sessionId);
+  const session = sseSessions.get(sessionId);
   if (!session) {
     res.status(404).send('Session not found');
     return;
@@ -219,12 +229,13 @@ app.post('/mcp/messages', async (req, res) => {
   await session.transport.handlePostMessage(req, res, req.body);
 });
 
-// Basic health check
+// ─── Health check ───────────────────────────────────────────────────────────
 app.get('/mcp/health', (req, res) => {
   res.json({ status: 'ok', vaultPath: VAULT_PATH });
 });
 
 app.listen(PORT, async () => {
   console.log(`Obsidian Headless MCP Server running on port ${PORT}`);
+  console.log(`Supports: Streamable HTTP (POST /mcp/sse) + Legacy SSE (GET /mcp/sse)`);
   await ensureVault();
 });
