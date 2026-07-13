@@ -24,6 +24,7 @@ async function ensureVault() {
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 // Auth middleware
 app.use((req, res, next) => {
