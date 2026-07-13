@@ -216,7 +216,7 @@ app.post('/mcp/messages', async (req, res) => {
     return;
   }
 
-  await session.transport.handlePostMessage(req, res);
+  await session.transport.handlePostMessage(req, res, req.body);
 });
 
 // Basic health check
