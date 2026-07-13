@@ -15,6 +15,38 @@ services:
     networks:
       - obsidian
 
+  obsidian-headless:
+    image: lscr.io/linuxserver/obsidian:latest
+    container_name: obsidian-headless
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Warsaw
+      - CUSTOM_USER=${VNC_USER:-admin}
+      - PASSWORD=${VNC_PASSWORD:-secret_vnc_password_change_me}
+    volumes:
+      - ./config:/config
+      - ./vault:/vault
+    networks:
+      - obsidian
+
+  obsidian-mcp:
+    build:
+      context: ./mcp-src
+      dockerfile: Dockerfile
+    container_name: obsidian-mcp
+    restart: unless-stopped
+    environment:
+      - MCP_API_KEY=${MCP_API_KEY:-default_secret_key_change_me}
+      - VAULT_PATH=/vault
+    volumes:
+      - ./vault:/vault:rw
+    networks:
+      - obsidian
+
 networks:
   obsidian:
     external: true
