@@ -50,9 +50,12 @@ const server = new McpServer({
 
 // Utility to safely resolve paths inside the vault
 function resolveVaultPath(relativePath: string): string {
-  // Prevent directory traversal attacks
-  const safePath = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, '');
-  return path.join(VAULT_PATH, safePath);
+  // Bulletproof directory traversal prevention
+  const resolvedPath = path.resolve(VAULT_PATH, relativePath);
+  if (!resolvedPath.startsWith(path.resolve(VAULT_PATH))) {
+    throw new Error('Security Error: Path traversal attempt detected.');
+  }
+  return resolvedPath;
 }
 
 // Tool: read_note
