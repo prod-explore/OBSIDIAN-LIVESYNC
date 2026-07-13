@@ -6,9 +6,8 @@ services:
     container_name: obsidian-couchdb
     restart: unless-stopped
     environment:
-      # Pamiętaj o zmianie hasła przed wdrożeniem!
-      - COUCHDB_USER=admin
-      - COUCHDB_PASSWORD=secret_password
+      - COUCHDB_USER=${COUCHDB_USER}
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD}
     volumes:
       - ./data:/opt/couchdb/data
       - ./local.ini:/opt/couchdb/etc/local.d/obsidian.ini
@@ -25,8 +24,8 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=Europe/Warsaw
-      - CUSTOM_USER=${VNC_USER:-admin}
-      - PASSWORD=${VNC_PASSWORD:-secret_vnc_password_change_me}
+      - CUSTOM_USER=${VNC_USER}
+      - PASSWORD=${VNC_PASSWORD}
     volumes:
       - ./config:/config
       - ./vault:/vault
@@ -40,7 +39,7 @@ services:
     container_name: obsidian-mcp
     restart: unless-stopped
     environment:
-      - MCP_API_KEY=${MCP_API_KEY:-default_secret_key_change_me}
+      - MCP_API_KEY=${MCP_API_KEY}
       - VAULT_PATH=/vault
     volumes:
       - ./vault:/vault:rw
