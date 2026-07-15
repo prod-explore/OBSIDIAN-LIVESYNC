@@ -1,5 +1,4 @@
 import express from 'express';
-import cors from 'cors';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -7,41 +6,49 @@ import { z } from 'zod';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-// Configuration
-const PORT = process.env.PORT || 3000;
-const API_KEY = process.env.MCP_API_KEY || 'default_secret_key_change_me';
+// ─── Configuration ────────────────────────────────────────────────────────────
+
+const PORT = Number(process.env.PORT) || 3000;
 const VAULT_PATH = process.env.VAULT_PATH || '/vault';
 
-// Ensure vault path exists
-async function ensureVault() {
+const API_KEY = process.env.MCP_API_KEY;
+if (!API_KEY) {
+  console.error('FATAL: MCP_API_KEY environment variable is not set. Refusing to start.');
+  process.exit(1);
+}
+
+// ─── Startup check ────────────────────────────────────────────────────────────
+
+async function ensureVault(): Promise<void> {
   try {
     await fs.access(VAULT_PATH);
     console.log(`Vault path verified at ${VAULT_PATH}`);
   } catch {
-    console.warn(`Vault path ${VAULT_PATH} does not exist yet. It will be created by the headless Obsidian.`);
+    console.warn(`Vault path ${VAULT_PATH} does not exist yet. It will be created by headless Obsidian.`);
   }
 }
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+// ─── Path safety ──────────────────────────────────────────────────────────────
 
-// Utility to safely resolve paths inside the vault
+const VAULT_RESOLVED = path.resolve(VAULT_PATH);
+
 function resolveVaultPath(relativePath: string): string {
-  // Bulletproof directory traversal prevention
-  const resolvedPath = path.resolve(VAULT_PATH, relativePath);
-  if (!resolvedPath.startsWith(path.resolve(VAULT_PATH))) {
+  const resolved = path.resolve(VAULT_RESOLVED, relativePath);
+  if (!resolved.startsWith(VAULT_RESOLVED + path.sep) && resolved !== VAULT_RESOLVED) {
     throw new Error('Security Error: Path traversal attempt detected.');
   }
-  return resolvedPath;
+  return resolved;
 }
 
-// MCP Server Factory — creates a fresh server instance per connection
+// ─── MCP Server Factory ───────────────────────────────────────────────────────
+
 function createMcpServer(): McpServer {
   const server = new McpServer({
     name: 'Obsidian Headless MCP',
     version: '1.0.0',
   });
+
+
 
   // Tool: read_note
   server.tool(
@@ -54,14 +61,9 @@ function createMcpServer(): McpServer {
       try {
         const fullPath = resolveVaultPath(notePath);
         const content = await fs.readFile(fullPath, 'utf-8');
-        return {
-          content: [{ type: 'text', text: content }],
-        };
+        return { content: [{ type: 'text', text: content }] };
       } catch (err: any) {
-        return {
-          content: [{ type: 'text', text: `Error reading note: ${err.message}` }],
-          isError: true,
-        };
+        return { content: [{ type: 'text', text: `Error reading note: ${err.message}` }], isError: true };
       }
     }
   );
@@ -79,14 +81,9 @@ function createMcpServer(): McpServer {
         const fullPath = resolveVaultPath(notePath);
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
         await fs.writeFile(fullPath, content, 'utf-8');
-        return {
-          content: [{ type: 'text', text: `Successfully wrote note to ${notePath}` }],
-        };
+        return { content: [{ type: 'text', text: `Successfully wrote note to ${notePath}` }] };
       } catch (err: any) {
-        return {
-          content: [{ type: 'text', text: `Error writing note: ${err.message}` }],
-          isError: true,
-        };
+        return { content: [{ type: 'text', text: `Error writing note: ${err.message}` }], isError: true };
       }
     }
   );
@@ -101,38 +98,40 @@ function createMcpServer(): McpServer {
     async ({ query }) => {
       try {
         const results: string[] = [];
-        
+
         async function walkDir(dir: string) {
           const entries = await fs.readdir(dir, { withFileTypes: true });
           for (const entry of entries) {
-            const res = path.resolve(dir, entry.name);
             if (entry.name.startsWith('.')) continue;
-            
+            const full = path.resolve(dir, entry.name);
             if (entry.isDirectory()) {
-              await walkDir(res);
+              await walkDir(full);
             } else if (entry.name.endsWith('.md')) {
               try {
-                const content = await fs.readFile(res, 'utf-8');
-                if (content.toLowerCase().includes(query.toLowerCase()) || entry.name.toLowerCase().includes(query.toLowerCase())) {
-                  results.push(path.relative(VAULT_PATH, res));
+                const content = await fs.readFile(full, 'utf-8');
+                const q = query.toLowerCase();
+                if (content.toLowerCase().includes(q) || entry.name.toLowerCase().includes(q)) {
+                  results.push(path.relative(VAULT_RESOLVED, full));
                 }
-              } catch (e) {
+              } catch {
                 // ignore unreadable files
               }
             }
           }
         }
-        
-        await walkDir(VAULT_PATH);
-        
+
+        await walkDir(VAULT_RESOLVED);
+
         return {
-          content: [{ type: 'text', text: results.length > 0 ? `Found ${results.length} notes matching "${query}":\n\n${results.join('\n')}` : `No notes found matching "${query}".` }],
+          content: [{
+            type: 'text',
+            text: results.length > 0
+              ? `Found ${results.length} notes matching "${query}":\n\n${results.join('\n')}`
+              : `No notes found matching "${query}".`,
+          }],
         };
       } catch (err: any) {
-        return {
-          content: [{ type: 'text', text: `Error searching notes: ${err.message}` }],
-          isError: true,
-        };
+        return { content: [{ type: 'text', text: `Error searching notes: ${err.message}` }], isError: true };
       }
     }
   );
@@ -140,15 +139,16 @@ function createMcpServer(): McpServer {
   return server;
 }
 
-// ─── Auth helper ────────────────────────────────────────────────────────────
-function extractToken(req: express.Request): string | undefined {
-  const fromQuery = req.query.token as string | undefined;
-  if (fromQuery) return fromQuery;
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 
+function extractToken(req: express.Request): string | undefined {
+  // Prefer Authorization header; fall back to ?token= query param
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.split(' ')[1];
-  }
+  if (authHeader?.startsWith('Bearer ')) return authHeader.split(' ')[1];
+
+  const fromQuery = req.query.token;
+  if (typeof fromQuery === 'string') return fromQuery;
+
   return undefined;
 }
 
@@ -165,8 +165,15 @@ function requireAuth(req: express.Request, res: express.Response): boolean {
   return true;
 }
 
-// ─── Streamable HTTP transport (new protocol, used by Antigravity) ──────────
-// Stateless: each POST creates a fresh server+transport, handles, and cleans up
+// ─── Express app ──────────────────────────────────────────────────────────────
+
+const app = express();
+app.disable('x-powered-by');
+app.use(express.json());
+
+// ─── Streamable HTTP transport (new protocol — Antigravity, Cursor, etc.) ─────
+// Stateless: each POST creates a fresh server+transport, handles, then cleans up.
+
 app.post('/mcp/sse', async (req, res) => {
   if (!requireAuth(req, res)) return;
 
@@ -183,13 +190,12 @@ app.post('/mcp/sse', async (req, res) => {
     await transport.handleRequest(req, res, req.body);
   } catch (err: any) {
     console.error('Streamable HTTP error:', err);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Internal server error' });
-    }
+    if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ─── Legacy SSE transport (old protocol, used by Claude Desktop) ────────────
+// ─── Legacy SSE transport (old protocol — Claude Desktop) ─────────────────────
+
 interface SseSession {
   transport: SSEServerTransport;
   server: McpServer;
@@ -207,16 +213,16 @@ app.get('/mcp/sse', async (req, res) => {
   sseSessions.set(transport.sessionId, { transport, server: connectionServer });
 
   res.on('close', async () => {
-    console.log(`SSE connection closed for session ${transport.sessionId}`);
+    console.log(`SSE connection closed: ${transport.sessionId}`);
     sseSessions.delete(transport.sessionId);
     try { await connectionServer.close(); } catch {}
   });
 });
 
 app.post('/mcp/messages', async (req, res) => {
-  const sessionId = req.query.sessionId as string;
-  if (!sessionId) {
-    res.status(400).send('Missing sessionId');
+  const sessionId = req.query.sessionId;
+  if (typeof sessionId !== 'string') {
+    res.status(400).send('Missing or invalid sessionId');
     return;
   }
 
@@ -229,13 +235,30 @@ app.post('/mcp/messages', async (req, res) => {
   await session.transport.handlePostMessage(req, res, req.body);
 });
 
-// ─── Health check ───────────────────────────────────────────────────────────
+// ─── Health check (authenticated) ────────────────────────────────────────────
+
 app.get('/mcp/health', (req, res) => {
-  res.json({ status: 'ok', vaultPath: VAULT_PATH });
+  if (!requireAuth(req, res)) return;
+  res.json({ status: 'ok' });
 });
 
-app.listen(PORT, async () => {
+// ─── Graceful shutdown ────────────────────────────────────────────────────────
+
+const httpServer = app.listen(PORT, async () => {
   console.log(`Obsidian Headless MCP Server running on port ${PORT}`);
-  console.log(`Supports: Streamable HTTP (POST /mcp/sse) + Legacy SSE (GET /mcp/sse)`);
+  console.log(`Protocols: Streamable HTTP (POST /mcp/sse) + Legacy SSE (GET /mcp/sse)`);
   await ensureVault();
 });
+
+function shutdown(signal: string) {
+  console.log(`Received ${signal}, shutting down gracefully...`);
+  httpServer.close(() => {
+    console.log('HTTP server closed.');
+    process.exit(0);
+  });
+  // Force exit if connections don't close within 10s
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
