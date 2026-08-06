@@ -19,6 +19,9 @@ Once deployed, AI tools like **Claude Desktop**, **Cursor**, **Google Antigravit
 - 📖 **Read** notes from your vault
 - ✍️ **Write** new notes or update existing ones
 - 🔍 **Search** notes by keyword
+- 📁 **List** a folder's immediate contents
+- 🔀 **Move / rename** notes (atomic, refuses to silently overwrite)
+- 🗑️ **Delete** notes — soft delete only, moved to `.trash/` rather than unlinked
 
 All traffic goes through an authenticated HTTPS endpoint — your notes never touch any third-party cloud.
 
@@ -168,6 +171,26 @@ Recursively searches all `.md` files for a keyword (case-insensitive, matches fi
 query: "project ideas"
 ```
 
+### `list_folder`
+Lists the immediate files and subfolders inside a directory — non-recursive. Useful for checking the real current state of a folder without a content grep.
+```
+path: "02-Areas/The Protocol"
+```
+
+### `move_note`
+Moves or renames a note. Atomic (`fs.rename`, not copy+delete). Refuses to overwrite an existing file at the destination unless you explicitly opt in.
+```
+from: "Inbox/draft.md"
+to: "02-Areas/Health/draft.md"
+overwrite: false   # default
+```
+
+### `delete_note`
+Soft delete only — moves the note into a `.trash/` folder inside the vault with a timestamp prefix, rather than calling `unlink`. Nothing this tool does is unrecoverable; worst case, go dig the file back out of `.trash/`.
+```
+path: "Old Notes/stale.md"
+```
+
 ---
 
 ## AI Client Configuration
@@ -234,11 +257,47 @@ curl "https://obsidian.yourdomain.com/mcp/health?token=YOUR_MCP_API_KEY"
 | Layer | Mechanism |
 |---|---|
 | Transport | HTTPS with Let's Encrypt certificate |
-| Authentication | Bearer token (`?token=` or `Authorization: Bearer`) |
-| Path traversal | `path.resolve()` + `startsWith()` on every file operation |
+| Authentication | Bearer token (`?token=` or `Authorization: Bearer`), compared with `crypto.timingSafeEqual` over SHA-256 hashes (not `===`, which leaks timing information) |
+| Path traversal | `path.resolve()` + `startsWith()` on every file operation — unit tested, see `mcp-src/src/__tests__/` |
+| Destructive operations | `delete_note` never calls `unlink` — moves to `.trash/` instead. `move_note` refuses to overwrite an existing destination unless told to. |
+| SSE session lifecycle | Sessions are swept on a timer if a client disconnects without firing `close` (e.g. a phone sleeping mid-connection), bounding worst-case memory growth on long-running deployments |
 | Obsidian GUI | No host port exposed post-setup |
 | OAuth confusion | Nginx returns plain 404 on `/.well-known/oauth-*` |
 | SSE buffering | `gzip off` + `proxy_buffering off` on `/mcp/` block |
+
+---
+
+## Development
+
+```bash
+cd mcp-src
+npm install
+npm test          # type-checks, builds, runs the unit test suite
+npm run dev        # tsc --watch + node --watch for local iteration
+```
+
+Source is organized by responsibility rather than as one file:
+
+```
+mcp-src/src/
+├── config.ts          # env loading/validation
+├── security.ts         # path traversal guard + constant-time auth compare
+├── server.ts           # express app, transports, auth middleware, SSE session sweep
+├── index.ts             # entrypoint — wires config + server, handles graceful shutdown
+├── tools/
+│   ├── types.ts         # shared result helpers (ok/fail)
+│   ├── readNote.ts
+│   ├── writeNote.ts
+│   ├── searchNotes.ts
+│   ├── listFolder.ts
+│   ├── moveNote.ts
+│   ├── deleteNote.ts
+│   └── index.ts         # registers all tools onto a server instance
+└── __tests__/
+    └── security.test.ts
+```
+
+See [`AGENTS.md`](./AGENTS.md) for conventions to follow when adding or changing tools — especially around what this project will and won't expose to an AI agent.
 
 ---
 
