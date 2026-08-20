@@ -81,3 +81,19 @@ Deliberately **not** on this list, and shouldn't be added without a real
 conversation about why: shell execution, permanent (non-trash) delete,
 recursive folder delete/move, arbitrary HTTP fetch from within a tool, or
 anything that reads `.env`/secrets back to the client.
+
+## Ops & Troubleshooting Notes
+
+### Incident: vault sync broke post-deploy (resolved)
+
+**Root cause:** `obsidian-mcp` container was writing files as `root`, while `obsidian-headless` runs as `PUID=1000`. Headless couldn't `mkdir`/write into root-owned folders (`EACCES`), which cascaded into ~18 files stuck as "possibly unprocessed" and sync getting suspended.
+
+**Fix applied:** `chown -R 1000:1000` on `/vault`, added `user: "1000:1000"` to `obsidian-mcp` in `docker-compose.yml`. A `USER node` directive is now also baked into `mcp-src/Dockerfile` itself, so a future `docker compose build` can't silently reintroduce root-owned files if the compose override ever gets removed.
+
+### LiveSync Config
+
+If you see LiveSync config rule violations in the plugin log (`handleFilenameCaseSensitive`, `usePluginSyncV2`, `customChunkSize`), it's worth aligning these across devices (phone + headless) to avoid future config-mismatch weirdness.
+
+### Backups
+
+Currently, there is no automated backup (relying on manual phone copies). A nightly cron `tar` snapshot on the raspi is the recommended actual fix, not yet set up.
