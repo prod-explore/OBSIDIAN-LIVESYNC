@@ -18,6 +18,7 @@ Once deployed, AI tools like **Claude Desktop**, **Cursor**, **Google Antigravit
 
 - 📖 **Read** notes from your vault
 - ✍️ **Write** new notes or update existing ones
+- ✏️ **Edit** notes by replacing a specific range of lines — no need to rewrite the whole file
 - 🔍 **Search** notes by keyword
 - 📁 **List** a folder's immediate contents
 - 🔀 **Move / rename** notes (atomic, refuses to silently overwrite)
@@ -165,6 +166,15 @@ path: "Folder/New Note.md"
 content: "# Hello\n\nThis note was written by an AI agent."
 ```
 
+### `edit_note`
+Replaces a range of lines in an existing note without touching the rest of the file. Read the note first to determine line numbers. Setting `end_line` to `start_line - 1` inserts `new_content` without removing any lines; passing an empty `new_content` deletes the specified lines.
+```
+path:        "Folder/My Note.md"
+start_line:  5         # first line to replace (1-indexed)
+end_line:    7         # last line to replace (inclusive)
+new_content: "Updated paragraph text."
+```
+
 ### `search_notes`
 Recursively searches all `.md` files for a keyword (case-insensitive, matches filename and content).
 ```
@@ -288,6 +298,7 @@ mcp-src/src/
 │   ├── types.ts         # shared result helpers (ok/fail)
 │   ├── readNote.ts
 │   ├── writeNote.ts
+│   ├── editNote.ts
 │   ├── searchNotes.ts
 │   ├── listFolder.ts
 │   ├── moveNote.ts

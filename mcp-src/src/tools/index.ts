@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Config } from '../config.js';
 import { registerReadNote } from './readNote.js';
 import { registerWriteNote } from './writeNote.js';
+import { registerEditNote } from './editNote.js';
 import { registerSearchNotes } from './searchNotes.js';
 import { registerListFolder } from './listFolder.js';
 import { registerMoveNote } from './moveNote.js';
@@ -12,6 +13,7 @@ export function registerAllTools(server: McpServer, config: Config): void {
   const ctx = { config };
   registerReadNote(server, ctx);
   registerWriteNote(server, ctx);
+  registerEditNote(server, ctx);
   registerSearchNotes(server, ctx);
   registerListFolder(server, ctx);
   registerMoveNote(server, ctx);
