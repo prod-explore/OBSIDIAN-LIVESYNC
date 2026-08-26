@@ -64,6 +64,7 @@ services:
       - CALENDAR_IDS=${CALENDAR_IDS:-primary}
       - TASKLIST_IDS=${TASKLIST_IDS:-@default}
       - POLL_INTERVAL_MINUTES=${POLL_INTERVAL_MINUTES:-5}
+      - DATA_PATH=/data
       - TZ=Europe/Warsaw
     user: "1000:1000"
     volumes:
