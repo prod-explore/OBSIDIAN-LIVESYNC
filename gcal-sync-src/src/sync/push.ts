@@ -10,7 +10,7 @@ export async function pushVaultData(
   calendar: calendar_v3.Calendar,
   tasks: tasks_v1.Tasks
 ) {
-  const folders = ['_Calendar', '_Tasks'];
+  const folders = ['{Calendar}', '{Tasks}'];
   
   for (const folder of folders) {
     let folderPath: string;
@@ -48,7 +48,7 @@ export async function pushVaultData(
       // and survived ingest (meaning no Google-side change collided with it)
       if (stat.mtimeMs > syncedTime + 2000) {
         try {
-          if (folder === '_Calendar' && frontmatter.calendar_id) {
+          if (folder === '{Calendar}' && frontmatter.calendar_id) {
              const payload: calendar_v3.Schema$Event = {};
              if (frontmatter.status) payload.status = frontmatter.status;
              
@@ -68,7 +68,7 @@ export async function pushVaultData(
              
              frontmatter.updated = res.data.updated || new Date().toISOString();
              
-          } else if (folder === '_Tasks' && frontmatter.tasklist_id) {
+          } else if (folder === '{Tasks}' && frontmatter.tasklist_id) {
              const payload: tasks_v1.Schema$Task = { id: frontmatter.google_id };
              if (frontmatter.status) payload.status = frontmatter.status;
              if (frontmatter.due) payload.due = new Date(frontmatter.due).toISOString();
