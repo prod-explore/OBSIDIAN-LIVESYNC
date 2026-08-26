@@ -317,6 +317,42 @@ See [`AGENTS.md`](./AGENTS.md) for conventions to follow when adding or changing
 
 ---
 
+## Calendar & Tasks Sync
+
+This repository includes a standalone background service (`obsidian-gcal-sync`) that continuously bidirectionally synchronizes Google Calendar events and Google Tasks with your Obsidian vault. It is **not** an MCP tool, but it operates directly on the vault's Markdown files, allowing the AI agent (and you) to enrich them with context.
+
+### Features & Limitations (v1)
+- **Ingest**: Fully pulls new events/tasks from Google and creates or updates files in `_Calendar/` and `_Tasks/`.
+- **Push**: **Only updates frontmatter.** Changes to the event/task `status`, `start`, `end`, and `due` dates are pushed back to Google.
+- **Title and Body edits are NEVER pushed back.** This guarantees your local notes and AI context are never accidentally clobbered by Google's API limitations or length constraints.
+- **Conflict Resolution**: If a file is modified locally and updated remotely on Google at the same time, Google wins. Your local changes are appended to `_Systems/sync-conflicts.md` so no data is ever silently lost. Deletes on Google only "soft-delete" (status: cancelled) locally.
+
+### Setup Instructions
+
+1. **Obtain Google OAuth Credentials**: Create a Google Cloud project, enable the Calendar API and Tasks API, and create an OAuth Client ID (Desktop app).
+2. **Generate a Refresh Token**:
+   ```bash
+   cd gcal-sync-src
+   npm run get-token
+   ```
+   Follow the console instructions to log in via your browser. The terminal will print a refresh token.
+3. **Configure Environment Variables**:
+   Copy `.env.example` to `.env` and fill in your details:
+   ```env
+   GOOGLE_CLIENT_ID=your_client_id
+   GOOGLE_CLIENT_SECRET=your_client_secret
+   GOOGLE_REFRESH_TOKEN=token_from_step_2
+   CALENDAR_IDS=primary
+   TASKLIST_IDS=@default
+   POLL_INTERVAL_MINUTES=5
+   ```
+4. **Deploy**:
+   ```bash
+   docker compose up -d --build
+   ```
+
+---
+
 ## License
 
 MIT — use freely, self-host happily.

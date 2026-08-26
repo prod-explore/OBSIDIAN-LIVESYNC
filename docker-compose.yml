@@ -50,6 +50,28 @@ services:
     networks:
       - obsidian
 
+  obsidian-gcal-sync:
+    build:
+      context: ./gcal-sync-src
+      dockerfile: Dockerfile
+    container_name: obsidian-gcal-sync
+    restart: unless-stopped
+    environment:
+      - VAULT_PATH=/vault/vault-mcp
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN}
+      - CALENDAR_IDS=${CALENDAR_IDS:-primary}
+      - TASKLIST_IDS=${TASKLIST_IDS:-@default}
+      - POLL_INTERVAL_MINUTES=${POLL_INTERVAL_MINUTES:-5}
+      - TZ=Europe/Warsaw
+    user: "1000:1000"
+    volumes:
+      - ./vault:/vault:rw
+      - ./gcal-sync-state:/data
+    networks:
+      - obsidian
+
 networks:
   obsidian:
     external: true
