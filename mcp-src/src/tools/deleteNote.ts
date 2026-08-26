@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as fs from 'fs/promises';
-import * as path from 'path';
 import { resolveVaultPath } from '../security.js';
+import { moveToTrash } from '../trash.js';
 import { ok, fail, ToolContext } from './types.js';
 
 /**
@@ -30,14 +30,8 @@ export function registerDeleteNote(server: McpServer, { config }: ToolContext): 
           throw new Error(`Note does not exist: ${notePath}`);
         });
 
-        const trashRoot = resolveVaultPath(config.vaultResolved, config.trashDir);
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const trashPath = path.join(trashRoot, `${timestamp}__${notePath.replace(/[/\\]/g, '__')}`);
-
-        await fs.mkdir(trashRoot, { recursive: true });
-        await fs.rename(fullPath, trashPath);
-
-        return ok(`Moved to trash: ${notePath} → ${config.trashDir}/${path.basename(trashPath)}`);
+        const trashedPath = await moveToTrash(config.vaultResolved, config.trashDir, notePath);
+        return ok(`Moved to trash: ${notePath} → ${trashedPath}`);
       } catch (err: any) {
         return fail(`Error deleting note: ${err.message}`);
       }
