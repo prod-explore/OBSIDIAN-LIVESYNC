@@ -1,39 +1,48 @@
+import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { resolveVaultPath } from '../security.js';
 import { ok, fail, ToolContext } from './types.js';
 
 /**
- * Returns a full recursive snapshot of all paths in the vault (directories +
- * files), skipping .trash/ and any dotfile/dotdir.
+ * Returns a recursive snapshot of paths rooted at the vault (or a subfolder).
+ * Skips dotfiles/dotdirs (.trash, .obsidian, etc.). No content is read.
  *
- * Cost scales with file count, not file size — no content is read.
- *
- * ── Recommended calling convention (document for the agent, not enforced here) ──
- * Call get_vault_tree:
- *   1. On first vault contact per session (before any read/write operation).
- *   2. Again after the session has been idle for > 5 minutes.
- * Rationale: files may have been moved or renamed outside this session
- * (e.g. via Obsidian on a phone, or by another tool).  Operating on a stale
- * path cache silently creates orphan files.  This tool is cheap; use it freely.
+ * ── Recommended calling convention ──
+ * 1. On first vault contact per session — full tree for orientation.
+ * 2. After > 5 min idle — files may have moved outside this session.
+ * 3. Scoped to a subfolder when exploring a project or area in detail.
  */
 export function registerVaultTree(server: McpServer, { config }: ToolContext): void {
   server.tool(
     'get_vault_tree',
-    'Returns a full recursive listing of every path in the vault (directories and file names only — no content). ' +
-      'IMPORTANT: call this on first vault contact per session, and again after > 5 minutes of inactivity, ' +
-      'to ensure you are not operating on stale paths.',
-    {},
-    async () => {
+    'Returns a recursive listing of paths (no content). ' +
+      'Leave path empty for the full vault tree. ' +
+      'Pass a folder path (e.g. "01-Projects/HYPNAGOGIA Instrumentals") to scope to a subtree. ' +
+      'IMPORTANT: call with no path on first vault contact per session and after >5 min idle.',
+    {
+      path: z
+        .string()
+        .default('')
+        .describe('Folder path relative to vault root. Empty = full vault tree.'),
+    },
+    async ({ path: inputPath }) => {
       try {
+        const rootPath = resolveVaultPath(config.vaultResolved, inputPath);
+        const stat = await fs.stat(rootPath);
+        if (!stat.isDirectory()) {
+          return fail(`Path is not a directory: ${inputPath}`);
+        }
         const lines: string[] = [];
-        await walk(config.vaultResolved, config.vaultResolved, lines);
+        await walk(config.vaultResolved, rootPath, lines);
         if (lines.length === 0) {
-          return ok('(vault is empty)');
+          return ok(`(empty) ${inputPath || '/'}`);
         }
         return ok(lines.join('\n'));
       } catch (err: any) {
-        return fail(`Error building vault tree: ${err.message}`);
+        if (err.code === 'ENOENT') return fail(`Path not found: ${inputPath}`);
+        return fail(`Error building tree: ${err.message}`);
       }
     }
   );
