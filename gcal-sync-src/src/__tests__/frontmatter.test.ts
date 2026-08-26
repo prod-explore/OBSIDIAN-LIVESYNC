@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseNote, serializeNote } from '../vault/frontmatter.js';
+import { parseNote, serializeNote } from '../markdown/frontmatter.js';
 
 test('parseNote extracts frontmatter and body', () => {
   const note = `---\ntitle: Hello\nstatus: confirmed\n---\n# Body\nHere is text.`;
