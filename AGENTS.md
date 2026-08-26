@@ -65,10 +65,6 @@ to hand an agent:
 
 - **`get_backlinks(path)`** — read-only: return every note that links to a
   given note. Genuinely useful for restructuring work, zero risk, easy add.
-- **`list_folder` recursive mode (opt-in flag)** — the current tool is
-  intentionally non-recursive; a `depth` parameter capped at some small
-  number (e.g. 3) would cover most "give me the tree" requests without
-  turning into an unbounded vault dump.
 - **`append_note(path, text)`** — append without needing to read-then-write
   the whole file first. Lower risk than `write_note` since it can't
   accidentally truncate existing content; still needs the same path guard.

@@ -151,12 +151,22 @@ After setup, the GUI is no longer needed. Remove the port mapping from `docker-c
 
 ## MCP Tools
 
-The server exposes three tools to AI agents:
+The server exposes the following tools to AI agents:
 
-### `read_note`
-Reads the content of a Markdown note from the vault.
+### `get_path`
+Reads a note **or** lists a folder — auto-detected from the path. One tool instead of two keeps the schema smaller.
 ```
-path: "Folder/My Note.md"
+path: "Folder/My Note.md"   # reads the note
+path: "Folder"              # lists the folder's immediate children
+path: ""                    # lists the vault root
+```
+
+### `get_vault_tree`
+Returns a full recursive snapshot of every path in the vault (directory and file names only — no content). Skips `.trash/` and all dotfiles/dotdirs.
+
+**Recommended calling convention for agents:** call on first vault contact per session, and again after > 5 minutes of inactivity. This prevents operating on stale paths when files have been moved or renamed outside the current session (e.g. via Obsidian on a phone).
+```
+(no arguments)
 ```
 
 ### `write_note`
@@ -179,12 +189,6 @@ new_content: "Updated paragraph text."
 Recursively searches all `.md` files for a keyword (case-insensitive, matches filename and content).
 ```
 query: "project ideas"
-```
-
-### `list_folder`
-Lists the immediate files and subfolders inside a directory — non-recursive. Useful for checking the real current state of a folder without a content grep.
-```
-path: "02-Areas/The Protocol"
 ```
 
 ### `move_note`
@@ -296,16 +300,17 @@ mcp-src/src/
 ├── index.ts             # entrypoint — wires config + server, handles graceful shutdown
 ├── tools/
 │   ├── types.ts         # shared result helpers (ok/fail)
-│   ├── readNote.ts
+│   ├── getPath.ts       # get_path: read note OR list folder (replaces read_note + list_folder)
+│   ├── vaultTree.ts     # get_vault_tree: recursive path snapshot
 │   ├── writeNote.ts
 │   ├── editNote.ts
 │   ├── searchNotes.ts
-│   ├── listFolder.ts
 │   ├── moveNote.ts
 │   ├── deleteNote.ts
 │   └── index.ts         # registers all tools onto a server instance
 └── __tests__/
-    └── security.test.ts
+    ├── security.test.ts
+    └── getPath.test.ts
 ```
 
 See [`AGENTS.md`](./AGENTS.md) for conventions to follow when adding or changing tools — especially around what this project will and won't expose to an AI agent.
