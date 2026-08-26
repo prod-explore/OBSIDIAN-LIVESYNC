@@ -32,6 +32,10 @@ export function registerMoveNote(server: McpServer, { config }: ToolContext): vo
         const fromPath = resolveVaultPath(config.vaultResolved, from);
         const toPath = resolveVaultPath(config.vaultResolved, to);
 
+        if (fromPath === toPath) {
+          return ok(`Source and destination are identical: ${from}. Nothing to do.`);
+        }
+
         await fs.access(fromPath).catch(() => {
           throw new Error(`Source note does not exist: ${from}`);
         });

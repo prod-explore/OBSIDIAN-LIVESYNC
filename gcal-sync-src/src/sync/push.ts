@@ -2,8 +2,8 @@ import { calendar_v3, tasks_v1 } from 'googleapis';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Config } from '../config.js';
-import { parseNote, serializeNote } from '../vault/frontmatter.js';
-import { resolveVaultPath } from '../vault/paths.js';
+import { parseNote, serializeNote } from '../markdown/frontmatter.js';
+import { resolveVaultPath, sanitizeTitle } from '../markdown/paths.js';
 
 export async function pushVaultData(
   config: Config,

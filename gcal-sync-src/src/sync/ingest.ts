@@ -3,8 +3,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Config } from '../config.js';
 import { SyncState } from './state.js';
-import { parseNote, serializeNote } from '../vault/frontmatter.js';
-import { sanitizeTitle, resolveVaultPath } from '../vault/paths.js';
+import { parseNote, serializeNote } from '../markdown/frontmatter.js';
+import { sanitizeTitle, resolveVaultPath } from '../markdown/paths.js';
 
 async function findFileByGoogleId(vaultRoot: string, folderRelative: string, googleId: string): Promise<string | null> {
   const folderPath = resolveVaultPath(vaultRoot, folderRelative);
@@ -101,8 +101,8 @@ export async function ingestGoogleData(
             frontmatter.end = event.end?.dateTime || event.end?.date || '';
           }
           
-          frontmatter.updated = event.updated || now;
-          frontmatter.synced_at = now;
+          frontmatter.updated = event.updated || new Date().toISOString();
+          frontmatter.synced_at = new Date().toISOString();
 
           const title = sanitizeTitle(event.summary || 'Untitled Event');
           const shortId = event.id.substring(0, 8);
@@ -197,8 +197,8 @@ export async function ingestGoogleData(
             if (task.due) frontmatter.due = task.due.substring(0, 10); // YYYY-MM-DD
           }
           
-          frontmatter.updated = task.updated || now;
-          frontmatter.synced_at = now;
+          frontmatter.updated = task.updated || new Date().toISOString();
+          frontmatter.synced_at = new Date().toISOString();
 
           const title = sanitizeTitle(task.title || 'Untitled Task');
           const shortId = task.id.substring(0, 8);
