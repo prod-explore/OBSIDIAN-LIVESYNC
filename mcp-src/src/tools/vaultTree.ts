@@ -6,28 +6,44 @@ import { resolveVaultPath } from '../security.js';
 import { ok, fail, ToolContext } from './types.js';
 
 /**
- * Returns a recursive snapshot of paths rooted at the vault (or a subfolder).
+ * Returns a depth-limited path snapshot rooted at the vault (or a subfolder).
  * Skips dotfiles/dotdirs (.trash, .obsidian, etc.). No content is read.
  *
+ * depth=1 (default): top-level folders + their immediate children.
+ *   Good for orientation — shows projects, areas, resource folders and their
+ *   hubs/READMEs without flooding the context with leaf notes.
+ * depth=-1: unlimited recursion.
+ *   Use when scoped to a specific project/area subfolder.
+ *
  * ── Recommended calling convention ──
- * 1. On first vault contact per session — full tree for orientation.
- * 2. After > 5 min idle — files may have moved outside this session.
- * 3. Scoped to a subfolder when exploring a project or area in detail.
+ * 1. First vault contact per session: get_vault_tree() — depth=1 for orientation.
+ * 2. After >5 min idle: same, to catch moves/renames that happened outside session.
+ * 3. Exploring a specific area: get_vault_tree("02-Areas/The Protocol", depth=-1).
  */
 export function registerVaultTree(server: McpServer, { config }: ToolContext): void {
   server.tool(
     'get_vault_tree',
-    'Returns a recursive listing of paths (no content). ' +
-      'Leave path empty for the full vault tree. ' +
-      'Pass a folder path (e.g. "01-Projects/HYPNAGOGIA Instrumentals") to scope to a subtree. ' +
-      'IMPORTANT: call with no path on first vault contact per session and after >5 min idle.',
+    'Returns a path listing of the vault (no file content). ' +
+      'Default depth=1 shows top-level folders + their immediate children — enough for orientation. ' +
+      'Use depth=-1 for a full recursive listing (best combined with a scoped path). ' +
+      'IMPORTANT: call on first vault contact per session and after >5 min idle to avoid stale paths.',
     {
       path: z
         .string()
         .default('')
-        .describe('Folder path relative to vault root. Empty = full vault tree.'),
+        .describe('Folder path relative to vault root. Empty = vault root.'),
+      depth: z
+        .number()
+        .int()
+        .default(1)
+        .describe(
+          'How many levels to recurse. ' +
+            '1 (default) = top folders + their immediate children. ' +
+            '2 = one level deeper. ' +
+            '-1 = unlimited (use with a scoped path to avoid large output).'
+        ),
     },
-    async ({ path: inputPath }) => {
+    async ({ path: inputPath, depth }) => {
       try {
         const rootPath = resolveVaultPath(config.vaultResolved, inputPath);
         const stat = await fs.stat(rootPath);
@@ -35,7 +51,7 @@ export function registerVaultTree(server: McpServer, { config }: ToolContext): v
           return fail(`Path is not a directory: ${inputPath}`);
         }
         const lines: string[] = [];
-        await walk(config.vaultResolved, rootPath, lines);
+        await walk(config.vaultResolved, rootPath, lines, depth, 0);
         if (lines.length === 0) {
           return ok(`(empty) ${inputPath || '/'}`);
         }
@@ -50,11 +66,19 @@ export function registerVaultTree(server: McpServer, { config }: ToolContext): v
 
 /**
  * Recursively walks `dirPath`, appending relative paths to `lines`.
- * Skips:
- *   - any entry whose name starts with '.'  (dotfiles / .trash / .obsidian)
- *   - symlinks (fs.readdir withFileTypes reports them; we skip to avoid loops)
+ * Skips dotfiles/dotdirs and symlinks.
+ *
+ * @param maxDepth  -1 = unlimited; 0 = this directory's children only (no recursion);
+ *                  N = recurse N levels deep.
+ * @param curDepth  current recursion depth (starts at 0).
  */
-async function walk(vaultRoot: string, dirPath: string, lines: string[]): Promise<void> {
+async function walk(
+  vaultRoot: string,
+  dirPath: string,
+  lines: string[],
+  maxDepth: number,
+  curDepth: number
+): Promise<void> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -65,7 +89,10 @@ async function walk(vaultRoot: string, dirPath: string, lines: string[]): Promis
 
     if (entry.isDirectory()) {
       lines.push(`📁 ${relPath}/`);
-      await walk(vaultRoot, absPath, lines);
+      // Recurse if unlimited (-1) or we haven't hit the depth cap yet.
+      if (maxDepth === -1 || curDepth < maxDepth) {
+        await walk(vaultRoot, absPath, lines, maxDepth, curDepth + 1);
+      }
     } else if (entry.isFile()) {
       lines.push(`📄 ${relPath}`);
     }
