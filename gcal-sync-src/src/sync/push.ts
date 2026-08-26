@@ -29,7 +29,12 @@ export async function pushVaultData(
 
     for (const file of files) {
       if (!file.endsWith('.md')) continue;
-      const fullPath = path.join(folderPath, file);
+      let fullPath: string;
+      try {
+        fullPath = resolveVaultPath(config.vaultResolved, `${folder}/${file}`);
+      } catch {
+        continue; // Defensive: skip any file whose path doesn't resolve cleanly
+      }
       
       const stat = await fs.stat(fullPath);
       const content = await fs.readFile(fullPath, 'utf-8');
