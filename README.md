@@ -322,7 +322,7 @@ See [`AGENTS.md`](./AGENTS.md) for conventions to follow when adding or changing
 This repository includes a standalone background service (`obsidian-gcal-sync`) that continuously bidirectionally synchronizes Google Calendar events and Google Tasks with your Obsidian vault. It is **not** an MCP tool, but it operates directly on the vault's Markdown files, allowing the AI agent (and you) to enrich them with context.
 
 ### Features & Limitations (v1)
-- **Ingest**: Fully pulls new events/tasks from Google and creates or updates files in `_Calendar/` and `_Tasks/`.
+- **Ingest**: Fully pulls new events/tasks from Google and creates or updates files in `{Calendar}` and `{Tasks}`.
 - **Push**: **Only updates frontmatter.** Changes to the event/task `status`, `start`, `end`, and `due` dates are pushed back to Google.
 - **Title and Body edits are NEVER pushed back.** This guarantees your local notes and AI context are never accidentally clobbered by Google's API limitations or length constraints.
 - **Conflict Resolution**: If a file is modified locally and updated remotely on Google at the same time, Google wins. Your local changes are appended to `_Systems/sync-conflicts.md` so no data is ever silently lost. Deletes on Google only "soft-delete" (status: cancelled) locally.

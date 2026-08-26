@@ -53,7 +53,7 @@ export async function ingestGoogleData(
         for (const event of events) {
           if (!event.id) continue;
           
-          const existingFile = await findFileByGoogleId(config.vaultResolved, '_Calendar', event.id);
+          const existingFile = await findFileByGoogleId(config.vaultResolved, '{Calendar}', event.id);
           
           let frontmatter: Record<string, any> = {
             type: 'event',
@@ -106,7 +106,7 @@ export async function ingestGoogleData(
 
           const title = sanitizeTitle(event.summary || 'Untitled Event');
           const shortId = event.id.substring(0, 8);
-          const targetRelative = existingFile || `_Calendar/${title}-${shortId}.md`;
+          const targetRelative = existingFile || `{Calendar}/${title}-${shortId}.md`;
           
           const fullPath = resolveVaultPath(config.vaultResolved, targetRelative);
           await fs.mkdir(path.dirname(fullPath), { recursive: true });
@@ -154,7 +154,7 @@ export async function ingestGoogleData(
             maxUpdated = task.updated || maxUpdated;
           }
 
-          const existingFile = await findFileByGoogleId(config.vaultResolved, '_Tasks', task.id);
+          const existingFile = await findFileByGoogleId(config.vaultResolved, '{Tasks}', task.id);
           
           let frontmatter: Record<string, any> = {
             type: 'task',
@@ -202,7 +202,7 @@ export async function ingestGoogleData(
 
           const title = sanitizeTitle(task.title || 'Untitled Task');
           const shortId = task.id.substring(0, 8);
-          const targetRelative = existingFile || `_Tasks/${title}-${shortId}.md`;
+          const targetRelative = existingFile || `{Tasks}/${title}-${shortId}.md`;
           
           const fullPath = resolveVaultPath(config.vaultResolved, targetRelative);
           await fs.mkdir(path.dirname(fullPath), { recursive: true });
