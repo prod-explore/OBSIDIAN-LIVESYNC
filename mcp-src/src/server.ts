@@ -8,7 +8,10 @@ import { registerAllTools } from './tools/index.js';
 import { tokensMatch } from './security.js';
 
 function createMcpServer(config: Config): McpServer {
-  const server = new McpServer({ name: 'Obsidian Headless MCP', version: '1.1.0' });
+  const server = new McpServer(
+    { name: 'Obsidian Headless MCP', version: '1.1.0' },
+    { instructions: 'Before any vault operation, read `_Systems/AGENTS.md` — it contains vault structure, access rules, and the navigation algorithm.' },
+  );
   registerAllTools(server, config);
   return server;
 }
