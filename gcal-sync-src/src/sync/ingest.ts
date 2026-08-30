@@ -105,6 +105,7 @@ export async function ingestGoogleData(
           frontmatter.synced_at = new Date().toISOString();
 
           const title = sanitizeTitle(event.summary || 'Untitled Event');
+          frontmatter.title = event.summary || 'Untitled Event'; // preserve original casing for push
           const shortId = event.id.substring(0, 8);
           const targetRelative = existingFile || `{Calendar}/${title}-${shortId}.md`;
           
@@ -201,6 +202,7 @@ export async function ingestGoogleData(
           frontmatter.synced_at = new Date().toISOString();
 
           const title = sanitizeTitle(task.title || 'Untitled Task');
+          frontmatter.title = task.title || 'Untitled Task'; // preserve original casing for push
           const shortId = task.id.substring(0, 8);
           const targetRelative = existingFile || `{Tasks}/${title}-${shortId}.md`;
           
@@ -216,7 +218,14 @@ export async function ingestGoogleData(
       }
     } while (pageToken);
 
-    // Save the latest update time we saw as our next sync threshold, plus 1 ms conceptually (though Google updatedMin is inclusive)
-    if (maxUpdated) state.tasksTokens[tasklistId] = maxUpdated;
+    // Save the latest update time we saw + 1 ms as our next sync threshold.
+    // Google Tasks updatedMin is inclusive (>=), so without this offset the task
+    // with the highest `updated` timestamp is re-fetched (and rewritten) on every
+    // poll cycle even when nothing has changed — causing the recurring conflict on
+    // "adas 100" (or whichever task happens to be the newest).
+    if (maxUpdated) {
+      const nextThreshold = new Date(new Date(maxUpdated).getTime() + 1).toISOString();
+      state.tasksTokens[tasklistId] = nextThreshold;
+    }
   }
 }
