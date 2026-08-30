@@ -3,14 +3,17 @@ import * as path from 'path';
 
 export interface SyncState {
   calendarTokens: Record<string, string>;
-  tasksTokens: Record<string, string>;
+  tasksTokens:    Record<string, string>;
+  // Manifest of google_ids known to exist per tasklist/calendar.
+  // Used by push.ts to detect file deletions (ids that vanished from the vault).
+  knownTaskIds:   Record<string, string[]>; // tasklistId → [googleId, ...]
+  knownEventIds:  Record<string, string[]>; // calendarId → [googleId, ...]
 }
 
 export class StateManager {
   private stateFile: string;
 
   constructor() {
-    // If running in docker, it maps to /data. If local, gcal-sync-state in current dir
     const dataDir = process.env.DATA_PATH || path.resolve(process.cwd(), 'gcal-sync-state');
     this.stateFile = path.join(dataDir, 'sync-state.json');
   }
@@ -18,9 +21,16 @@ export class StateManager {
   async load(): Promise<SyncState> {
     try {
       const content = await fs.readFile(this.stateFile, 'utf-8');
-      return JSON.parse(content);
+      const raw = JSON.parse(content);
+      // Zero-fill new fields — existing sync-state.json files won't break.
+      return {
+        calendarTokens: raw.calendarTokens ?? {},
+        tasksTokens:    raw.tasksTokens    ?? {},
+        knownTaskIds:   raw.knownTaskIds   ?? {},
+        knownEventIds:  raw.knownEventIds  ?? {},
+      };
     } catch {
-      return { calendarTokens: {}, tasksTokens: {} };
+      return { calendarTokens: {}, tasksTokens: {}, knownTaskIds: {}, knownEventIds: {} };
     }
   }
 

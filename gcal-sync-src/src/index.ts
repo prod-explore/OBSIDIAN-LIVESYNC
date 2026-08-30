@@ -24,7 +24,7 @@ async function runSyncCycle() {
     await ingestGoogleData(config, state, calendar, tasks);
     
     console.log('[Push] Pushing local changes to Google...');
-    await pushVaultData(config, calendar, tasks);
+    await pushVaultData(config, state, calendar, tasks);
 
     await stateManager.save(state);
     console.log(`--- Sync Cycle Completed Successfully ---\n`);
