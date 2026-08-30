@@ -5,6 +5,7 @@ import { Config } from '../config.js';
 import { SyncState } from './state.js';
 import { parseNote, serializeNote } from '../markdown/frontmatter.js';
 import { sanitizeTitle, resolveVaultPath } from '../markdown/paths.js';
+import { computeSyncHash } from './hash.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -90,12 +91,14 @@ export async function ingestGoogleData(
             body = parsed.body; // preserve private Obsidian notes
 
             // -----------------------------------------------------------------
-            // Last-Write-Wins: compare file mtime vs Google's updated timestamp.
+            // Hash-based Modification Check (Immunized against LiveSync)
             // -----------------------------------------------------------------
+            const currentHash = computeSyncHash(frontmatter);
+            const locallyModified = frontmatter.sync_hash
+              ? frontmatter.sync_hash !== currentHash
+              : (frontmatter.synced_at ? stat.mtimeMs > new Date(frontmatter.synced_at).getTime() + 2000 : false);
+
             const googleUpdatedMs = event.updated ? new Date(event.updated).getTime() : 0;
-            const locallyModified = frontmatter.synced_at
-              ? stat.mtimeMs > new Date(frontmatter.synced_at).getTime() + 2000
-              : false;
 
             if (locallyModified && stat.mtimeMs >= googleUpdatedMs) {
               // Obsidian is the newer interface — skip Google's data.
@@ -135,6 +138,7 @@ export async function ingestGoogleData(
 
           frontmatter.updated   = event.updated || new Date().toISOString();
           frontmatter.synced_at = new Date().toISOString();
+          frontmatter.sync_hash = computeSyncHash(frontmatter);
 
           const safeTitle     = sanitizeTitle(event.summary || 'Untitled Event');
           const shortId       = event.id.substring(0, 8);
@@ -210,12 +214,14 @@ export async function ingestGoogleData(
             body = parsed.body;
 
             // -----------------------------------------------------------------
-            // Last-Write-Wins
+            // Hash-based Modification Check (Immunized against LiveSync)
             // -----------------------------------------------------------------
+            const currentHash = computeSyncHash(frontmatter);
+            const locallyModified = frontmatter.sync_hash
+              ? frontmatter.sync_hash !== currentHash
+              : (frontmatter.synced_at ? stat.mtimeMs > new Date(frontmatter.synced_at).getTime() + 2000 : false);
+
             const googleUpdatedMs = task.updated ? new Date(task.updated).getTime() : 0;
-            const locallyModified = frontmatter.synced_at
-              ? stat.mtimeMs > new Date(frontmatter.synced_at).getTime() + 2000
-              : false;
 
             if (locallyModified && stat.mtimeMs >= googleUpdatedMs) {
               console.log(`[Ingest][LWW] Obsidian newer for ${existingFile} — deferring to push`);
@@ -249,6 +255,7 @@ export async function ingestGoogleData(
 
           frontmatter.updated   = task.updated || new Date().toISOString();
           frontmatter.synced_at = new Date().toISOString();
+          frontmatter.sync_hash = computeSyncHash(frontmatter);
 
           const safeTitle      = sanitizeTitle(task.title || 'Untitled Task');
           const shortId        = task.id.substring(0, 8);
