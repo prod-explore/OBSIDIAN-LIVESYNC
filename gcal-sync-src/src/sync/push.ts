@@ -4,6 +4,7 @@ import { Config } from '../config.js';
 import { SyncState } from './state.js';
 import { parseNote, serializeNote } from '../markdown/frontmatter.js';
 import { resolveVaultPath, sanitizeTitle } from '../markdown/paths.js';
+import { computeSyncHash } from './hash.js';
 
 // ---------------------------------------------------------------------------
 // Main push function
@@ -107,9 +108,12 @@ async function pushFolder(
     // ------------------------------------------------------------------
     // Normal flow
     // ------------------------------------------------------------------
-    const isNew         = !frontmatter.google_id;
-    const syncedTime    = frontmatter.synced_at ? new Date(frontmatter.synced_at).getTime() : 0;
-    const locallyModified = stat.mtimeMs > syncedTime + 2000;
+    const isNew = !frontmatter.google_id;
+    
+    const currentHash = computeSyncHash(frontmatter);
+    const locallyModified = frontmatter.sync_hash
+      ? frontmatter.sync_hash !== currentHash
+      : (frontmatter.synced_at ? stat.mtimeMs > new Date(frontmatter.synced_at).getTime() + 2000 : false);
 
     // Skip files that were created by Google and haven't been locally touched.
     if (isNew && frontmatter.source === 'google') continue;
@@ -257,6 +261,7 @@ async function pushTaskNote(
 
   frontmatter.updated   = res.data.updated || new Date().toISOString();
   frontmatter.synced_at = new Date().toISOString();
+  frontmatter.sync_hash = computeSyncHash(frontmatter);
   await fs.writeFile(fullPath, serializeNote(frontmatter, body), 'utf-8');
 
   // Keep manifest in sync.
@@ -331,6 +336,7 @@ async function pushCalendarNote(
 
   frontmatter.updated   = res.data.updated || new Date().toISOString();
   frontmatter.synced_at = new Date().toISOString();
+  frontmatter.sync_hash = computeSyncHash(frontmatter);
   await fs.writeFile(fullPath, serializeNote(frontmatter, body), 'utf-8');
 
   // Keep manifest in sync.
