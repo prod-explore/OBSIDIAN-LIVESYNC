@@ -1,10 +1,13 @@
 import { calendar_v3, tasks_v1 } from 'googleapis';
 import * as fs from 'fs/promises';
+import * as path from 'path';
 import { Config } from '../config.js';
 import { SyncState } from './state.js';
 import { parseNote, serializeNote } from '../markdown/frontmatter.js';
 import { resolveVaultPath, sanitizeTitle } from '../markdown/paths.js';
 import { computeSyncHash } from './hash.js';
+
+const ARCHIVE_PREFIX = '04-Archive';
 
 // ---------------------------------------------------------------------------
 // Main push function
@@ -31,45 +34,57 @@ async function pushFolder(
   calendar: calendar_v3.Calendar,
   tasks: tasks_v1.Tasks
 ) {
-  let folderPath: string;
-  try {
-    folderPath = resolveVaultPath(config.vaultResolved, folder);
-  } catch {
-    return;
-  }
+  // Scan both the active folder and its archive mirror so that archived tasks
+  // are pushed (status updates) and not falsely detected as deletions.
+  const foldersToScan = [folder, `${ARCHIVE_PREFIX}/${folder}`];
 
-  let files: string[] = [];
-  try {
-    files = await fs.readdir(folderPath);
-  } catch {
-    return; // Folder doesn't exist yet — nothing to push.
-  }
-
-  // Collect every google_id currently present in the folder (per list/calendar).
-  // We'll use this to diff against the known-ID manifest and detect deletions.
+  // Maps listId → set of google_ids currently present in either location.
+  // Built before any mutations so deletion detection has a stable snapshot.
   const presentIdsByList = new Map<string, Set<string>>();
 
-  for (const file of files) {
-    if (!file.endsWith('.md') || file.startsWith('README')) continue;
+  const allFiles: { file: string; relFolder: string }[] = [];
 
+  for (const relFolder of foldersToScan) {
+    try {
+      const folderPath = resolveVaultPath(config.vaultResolved, relFolder);
+      const files = await fs.readdir(folderPath);
+      for (const file of files) {
+        if (file.endsWith('.md') && !file.startsWith('README')) {
+          allFiles.push({ file, relFolder });
+        }
+      }
+    } catch (err: any) {
+      if (err.code !== 'ENOENT') console.error(`[Push] Error reading ${relFolder}:`, err.message);
+    }
+  }
+
+  for (const { file, relFolder } of allFiles) {
     let fullPath: string;
     try {
-      fullPath = resolveVaultPath(config.vaultResolved, `${folder}/${file}`);
+      fullPath = resolveVaultPath(config.vaultResolved, `${relFolder}/${file}`);
     } catch {
       continue;
     }
 
-    const stat    = await fs.stat(fullPath);
-    const content = await fs.readFile(fullPath, 'utf-8');
+    // Guard: ingest may have moved this file between our readdir and now.
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
+    let content: string;
+    try {
+      stat    = await fs.stat(fullPath);
+      content = await fs.readFile(fullPath, 'utf-8');
+    } catch (err: any) {
+      if (err.code === 'ENOENT') continue; // moved/deleted between scan and read
+      throw err;
+    }
+
     const { frontmatter, body } = parseNote(content);
 
-    // Determine which list/calendar this file belongs to.
     const listId: string =
       folder === '{Tasks}'
         ? (frontmatter.tasklist_id || config.tasklistIds[0])
         : (frontmatter.calendar_id || config.calendarIds[0]);
 
-    // Track presence (before any mutations that might add a google_id).
+    // Track presence before any mutations.
     if (frontmatter.google_id) {
       if (!presentIdsByList.has(listId)) presentIdsByList.set(listId, new Set());
       presentIdsByList.get(listId)!.add(frontmatter.google_id);
@@ -82,15 +97,12 @@ async function pushFolder(
     if (frontmatter.push_pending === true && !frontmatter.google_id) {
       // Re-attempt the insert. Worst case: one extra duplicate in Google
       // (very rare — crash must happen in a sub-second window).
-      await handleFile(folder, file, fullPath, frontmatter, body, config, state, calendar, tasks, true);
-      // Re-read to pick up the now-written google_id for present-set tracking.
-      try {
-        const updated = parseNote(await fs.readFile(fullPath, 'utf-8'));
-        if (updated.frontmatter.google_id) {
-          if (!presentIdsByList.has(listId)) presentIdsByList.set(listId, new Set());
-          presentIdsByList.get(listId)!.add(updated.frontmatter.google_id);
-        }
-      } catch { /* ignore */ }
+      await handleFile(folder, relFolder, file, fullPath, frontmatter, body, config, state, calendar, tasks, true);
+      // frontmatter is mutated by reference — pick up the new google_id directly.
+      if (frontmatter.google_id) {
+        if (!presentIdsByList.has(listId)) presentIdsByList.set(listId, new Set());
+        presentIdsByList.get(listId)!.add(frontmatter.google_id);
+      }
       continue;
     }
 
@@ -109,29 +121,26 @@ async function pushFolder(
     // Normal flow
     // ------------------------------------------------------------------
     const isNew = !frontmatter.google_id;
-    
+
     const currentHash = computeSyncHash(frontmatter);
     const locallyModified = frontmatter.sync_hash
       ? frontmatter.sync_hash !== currentHash
       : (frontmatter.synced_at ? stat.mtimeMs > new Date(frontmatter.synced_at).getTime() + 2000 : false);
 
-    // Skip files that were created by Google and haven't been locally touched.
+    // Skip Google-originated files that haven't been locally touched.
     if (isNew && frontmatter.source === 'google') continue;
 
     // Nothing changed locally.
     if (!isNew && !locallyModified) continue;
 
-    await handleFile(folder, file, fullPath, frontmatter, body, config, state, calendar, tasks, isNew);
+    await handleFile(folder, relFolder, file, fullPath, frontmatter, body, config, state, calendar, tasks, isNew);
 
-    // Re-read to pick up google_id written during create.
-    if (isNew) {
-      try {
-        const updated = parseNote(await fs.readFile(fullPath, 'utf-8'));
-        if (updated.frontmatter.google_id) {
-          if (!presentIdsByList.has(listId)) presentIdsByList.set(listId, new Set());
-          presentIdsByList.get(listId)!.add(updated.frontmatter.google_id);
-        }
-      } catch { /* ignore */ }
+    // frontmatter is mutated by handleFile (google_id written for new tasks).
+    // Pick it up directly — no re-read needed, and this works correctly even
+    // when pushTaskNote renamed the file to the archive (fullPath no longer exists).
+    if (frontmatter.google_id) {
+      if (!presentIdsByList.has(listId)) presentIdsByList.set(listId, new Set());
+      presentIdsByList.get(listId)!.add(frontmatter.google_id);
     }
   }
 
@@ -175,11 +184,13 @@ async function pushFolder(
 // Route to the correct handler based on folder type
 // ---------------------------------------------------------------------------
 
+
 async function handleFile(
   folder: '{Tasks}' | '{Calendar}',
+  relFolder: string,
   file: string,
   fullPath: string,
-  frontmatter: Record<string, any>,
+  frontmatter: Record<string, any>, // mutated in-place — callers see google_id etc.
   body: string,
   config: Config,
   state: SyncState,
@@ -189,7 +200,8 @@ async function handleFile(
 ) {
   try {
     if (folder === '{Tasks}') {
-      await pushTaskNote(tasks, config, state, fullPath, file, frontmatter, body, isNew);
+      const fromArchive = relFolder.startsWith(`${ARCHIVE_PREFIX}/`);
+      await pushTaskNote(tasks, config, state, fullPath, file, frontmatter, body, isNew, fromArchive);
     } else {
       await pushCalendarNote(calendar, config, state, fullPath, file, frontmatter, body, isNew);
     }
@@ -206,7 +218,7 @@ async function handleFile(
 }
 
 // ---------------------------------------------------------------------------
-// Task: create or update
+// Task: create or update, then archive / unarchive if status warrants it
 // ---------------------------------------------------------------------------
 
 async function pushTaskNote(
@@ -215,9 +227,10 @@ async function pushTaskNote(
   state: SyncState,
   fullPath: string,
   file: string,
-  frontmatter: Record<string, any>,
+  frontmatter: Record<string, any>, // mutated in-place so callers see google_id etc.
   body: string,
-  isNew: boolean
+  isNew: boolean,
+  fromArchive: boolean
 ) {
   const tasklistId: string = frontmatter.tasklist_id || config.tasklistIds[0];
 
@@ -226,17 +239,17 @@ async function pushTaskNote(
     sanitizeTitle(file.replace(/\.md$/, '').replace(/-[a-z0-9]{8}$/i, ''));
 
   const payload: tasks_v1.Schema$Task = { title };
-  if (frontmatter.status)      payload.status = frontmatter.status;
-  if (frontmatter.due)         payload.due    = new Date(frontmatter.due).toISOString();
+  if (frontmatter.status)              payload.status = frontmatter.status;
+  if (frontmatter.due)                 payload.due    = new Date(frontmatter.due).toISOString();
   // frontmatter.description syncs to Google notes.
   // The Markdown body (below ---) stays private to Obsidian and is never sent.
-  if (frontmatter.description != null) payload.notes = String(frontmatter.description);
+  if (frontmatter.description != null) payload.notes  = String(frontmatter.description);
 
   let res: { data: tasks_v1.Schema$Task };
 
   if (isNew) {
-    // Phase 1 — write crash-safe marker BEFORE the API call.
-    // If the process dies here, the next cycle sees push_pending=true and retries.
+    // Phase 1 — crash-safe marker: written to disk before the API call so a
+    // mid-flight crash is recoverable on the next cycle.
     frontmatter.push_pending = true;
     frontmatter.tasklist_id  = tasklistId;
     frontmatter.type         = 'task';
@@ -262,7 +275,36 @@ async function pushTaskNote(
   frontmatter.updated   = res.data.updated || new Date().toISOString();
   frontmatter.synced_at = new Date().toISOString();
   frontmatter.sync_hash = computeSyncHash(frontmatter);
+
+  // ---- Bidirectional archive management ----
+  //
+  // After syncing to Google, move the file if its location no longer matches
+  // its status. Both directions are supported (active→archive, archive→active).
+  //
+  // Strategy: write the updated content to fullPath first (crash-safe), then
+  // rename atomically. If we crash after writeFile but before rename, the file
+  // at fullPath has correct content and will be retried next cycle.
+  const isArchived      = frontmatter.status === 'completed' || frontmatter.status === 'cancelled';
+  const shouldArchive   = isArchived && !fromArchive;
+  const shouldUnarchive = !isArchived && fromArchive;
+
   await fs.writeFile(fullPath, serializeNote(frontmatter, body), 'utf-8');
+
+  if (shouldArchive || shouldUnarchive) {
+    const targetRelative = shouldArchive
+      ? `${ARCHIVE_PREFIX}/{Tasks}/${file}`
+      : `{Tasks}/${file}`;
+    const targetPath = resolveVaultPath(config.vaultResolved, targetRelative);
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    try {
+      await fs.rename(fullPath, targetPath);
+      console.log(`[Push] ${shouldArchive ? 'Archived' : 'Unarchived'} task: ${file}`);
+    } catch (err: any) {
+      // Non-fatal: content is written correctly at fullPath. Next ingest cycle
+      // will move the file once Google confirms the completed status.
+      console.error(`[Push] Could not ${shouldArchive ? 'archive' : 'unarchive'} ${file}:`, err.message);
+    }
+  }
 
   // Keep manifest in sync.
   if (frontmatter.google_id) {

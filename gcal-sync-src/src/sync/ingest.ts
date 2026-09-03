@@ -7,6 +7,8 @@ import { parseNote, serializeNote } from '../markdown/frontmatter.js';
 import { sanitizeTitle, resolveVaultPath } from '../markdown/paths.js';
 import { computeSyncHash } from './hash.js';
 
+const ARCHIVE_PREFIX = '04-Archive';
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -16,25 +18,48 @@ function addToManifest(manifest: Record<string, string[]>, key: string, id: stri
   if (!manifest[key].includes(id)) manifest[key].push(id);
 }
 
+/**
+ * Searches both the active folder and its archive mirror for a file whose
+ * frontmatter contains the given google_id. Active folder is checked first
+ * so that any duplicate (from a previous failed unlink) resolves to the active
+ * copy rather than the stale archive copy.
+ *
+ * Returns a vault-relative path (forward slashes), or null if not found.
+ */
 async function findFileByGoogleId(
   vaultRoot: string,
   folderRelative: string,
   googleId: string
 ): Promise<string | null> {
-  const folderPath = resolveVaultPath(vaultRoot, folderRelative);
-  try {
-    const files = await fs.readdir(folderPath);
+  const foldersToSearch = [folderRelative, `${ARCHIVE_PREFIX}/${folderRelative}`];
+  for (const folder of foldersToSearch) {
+    let folderPath: string;
+    try {
+      folderPath = resolveVaultPath(vaultRoot, folder);
+    } catch {
+      continue; // path traversal guard rejected it — skip
+    }
+    let files: string[];
+    try {
+      files = await fs.readdir(folderPath);
+    } catch (err: any) {
+      if (err.code !== 'ENOENT') console.error(`[Ingest] Error reading ${folder}:`, err.message);
+      continue;
+    }
     for (const file of files) {
       if (!file.endsWith('.md')) continue;
       const fullPath = path.join(folderPath, file);
-      const content = await fs.readFile(fullPath, 'utf-8');
+      let content: string;
+      try {
+        content = await fs.readFile(fullPath, 'utf-8');
+      } catch {
+        continue; // file disappeared between readdir and readFile
+      }
       const { frontmatter } = parseNote(content);
       if (frontmatter.google_id === googleId) {
-        return path.join(folderRelative, file).replace(/\\/g, '/');
+        return path.join(folder, file).replace(/\\/g, '/');
       }
     }
-  } catch (err: any) {
-    if (err.code !== 'ENOENT') console.error(`[Ingest] Error searching ${folderRelative}:`, err.message);
   }
   return null;
 }
@@ -257,13 +282,61 @@ export async function ingestGoogleData(
           frontmatter.synced_at = new Date().toISOString();
           frontmatter.sync_hash = computeSyncHash(frontmatter);
 
-          const safeTitle      = sanitizeTitle(task.title || 'Untitled Task');
-          const shortId        = task.id.substring(0, 8);
-          const targetRelative = existingFile || `{Tasks}/${safeTitle}-${shortId}.md`;
+          const safeTitle = sanitizeTitle(task.title || 'Untitled Task');
+          const shortId   = task.id.substring(0, 8);
 
-          const fullPath = resolveVaultPath(config.vaultResolved, targetRelative);
-          await fs.mkdir(path.dirname(fullPath), { recursive: true });
-          await fs.writeFile(fullPath, serializeNote(frontmatter, body), 'utf-8');
+          // ----------------------------------------------------------------
+          // Bidirectional archive management.
+          //
+          // File location always reflects task status:
+          //   needsAction → {Tasks}/
+          //   completed / cancelled → 04-Archive/{Tasks}/
+          //
+          // Both directions are supported so a task un-completed in Google
+          // is automatically moved back to the active folder.
+          // ----------------------------------------------------------------
+          const isArchived        = frontmatter.status === 'completed' || frontmatter.status === 'cancelled';
+          const currentlyArchived = existingFile?.startsWith(`${ARCHIVE_PREFIX}/`) ?? false;
+
+          let targetRelative: string;
+          if (existingFile) {
+            if (isArchived && !currentlyArchived) {
+              // Active → archive: preserve filename, change folder.
+              targetRelative = `${ARCHIVE_PREFIX}/${existingFile}`;
+            } else if (!isArchived && currentlyArchived) {
+              // Archive → active (task un-completed in Google).
+              targetRelative = existingFile.slice(`${ARCHIVE_PREFIX}/`.length);
+            } else {
+              // No location change needed — update in place.
+              targetRelative = existingFile;
+            }
+          } else {
+            // New task: write directly to the correct folder.
+            targetRelative = isArchived
+              ? `${ARCHIVE_PREFIX}/{Tasks}/${safeTitle}-${shortId}.md`
+              : `{Tasks}/${safeTitle}-${shortId}.md`;
+          }
+
+          // Write to the target first. If we crash before the unlink below,
+          // the next cycle will find the new file (active folder has priority
+          // in findFileByGoogleId) and cleanly remove the stale copy then.
+          const targetPath = resolveVaultPath(config.vaultResolved, targetRelative);
+          await fs.mkdir(path.dirname(targetPath), { recursive: true });
+          await fs.writeFile(targetPath, serializeNote(frontmatter, body), 'utf-8');
+
+          if (existingFile && targetRelative !== existingFile) {
+            const oldPath = resolveVaultPath(config.vaultResolved, existingFile);
+            try {
+              await fs.unlink(oldPath);
+              console.log(`[Ingest] ${isArchived ? 'Archived' : 'Unarchived'} task: ${existingFile} → ${targetRelative}`);
+            } catch (err: any) {
+              // ENOENT: already gone (double-cycle race) — new file is written
+              // correctly, so this is safe to ignore. Any other code is unexpected.
+              if (err.code !== 'ENOENT') {
+                console.error(`[Ingest] Could not remove old task file (${existingFile}):`, err.message);
+              }
+            }
+          }
 
           addToManifest(state.knownTaskIds, tasklistId, task.id);
         }
