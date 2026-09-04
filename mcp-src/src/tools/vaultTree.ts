@@ -50,11 +50,8 @@ export function registerVaultTree(server: McpServer, { config }: ToolContext): v
         if (!stat.isDirectory()) {
           return fail(`Path is not a directory: ${inputPath}`);
         }
-        const lines: string[] = [];
-        await walk(config.vaultResolved, rootPath, lines, depth, 0);
-        if (lines.length === 0) {
-          return ok(`(empty) ${inputPath || '/'}`);
-        }
+        const lines: string[] = [inputPath ? `${inputPath}/` : '(vault root)'];
+        await walk(rootPath, lines, depth, 0, '');
         return ok(lines.join('\n'));
       } catch (err: any) {
         if (err.code === 'ENOENT') return fail(`Path not found: ${inputPath}`);
@@ -65,37 +62,60 @@ export function registerVaultTree(server: McpServer, { config }: ToolContext): v
 }
 
 /**
- * Recursively walks `dirPath`, appending relative paths to `lines`.
- * Skips dotfiles/dotdirs and symlinks.
+ * Recursively walks `dirPath`, appending classic tree-style lines to `lines`.
  *
- * @param maxDepth  -1 = unlimited; 0 = this directory's children only (no recursion);
- *                  N = recurse N levels deep.
+ *   01-Projects/
+ *   ├── README.md
+ *   ├── Projekt A/
+ *   │   ├── Notatka.md
+ *   │   └── Plik.md
+ *   └── Projekt B/
+ *
+ * Skips dotfiles/dotdirs and symlinks. Directories are listed before files
+ * within each level for consistent visual grouping.
+ *
+ * @param maxDepth  -1 = unlimited; 0 = direct children only; N = N levels deep.
  * @param curDepth  current recursion depth (starts at 0).
+ * @param prefix    the indentation string built up through recursion.
  */
 async function walk(
-  vaultRoot: string,
   dirPath: string,
   lines: string[],
   maxDepth: number,
-  curDepth: number
+  curDepth: number,
+  prefix: string
 ): Promise<void> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
-  for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue;
+  // Skip dotfiles/dotdirs; sort directories before files, then alphabetically.
+  const visible = entries
+    .filter(e => !e.name.startsWith('.') && (e.isDirectory() || e.isFile()))
+    .sort((a, b) => {
+      const aDir = a.isDirectory() ? 0 : 1;
+      const bDir = b.isDirectory() ? 0 : 1;
+      if (aDir !== bDir) return aDir - bDir;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
 
-    const absPath = path.join(dirPath, entry.name);
-    const relPath = path.relative(vaultRoot, absPath).replace(/\\/g, '/');
+  for (let i = 0; i < visible.length; i++) {
+    const entry    = visible[i];
+    const isLast   = i === visible.length - 1;
+    const branch   = isLast ? '└── ' : '├── ';
+    const childPfx = isLast ? '    ' : '│   ';
 
     if (entry.isDirectory()) {
-      lines.push(`📁 ${relPath}/`);
-      // Recurse if unlimited (-1) or we haven't hit the depth cap yet.
+      lines.push(`${prefix}${branch}${entry.name}/`);
       if (maxDepth === -1 || curDepth < maxDepth) {
-        await walk(vaultRoot, absPath, lines, maxDepth, curDepth + 1);
+        await walk(
+          path.join(dirPath, entry.name),
+          lines,
+          maxDepth,
+          curDepth + 1,
+          prefix + childPfx
+        );
       }
-    } else if (entry.isFile()) {
-      lines.push(`📄 ${relPath}`);
+    } else {
+      lines.push(`${prefix}${branch}${entry.name}`);
     }
-    // skip symlinks silently
   }
 }

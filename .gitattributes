@@ -1,9 +1,18 @@
+﻿# Force LF line endings in the repo (source of truth for the Pi/Linux target).
+# Windows users with core.autocrlf=true still get CRLF in their working tree
+# — this only controls what goes into Git objects.
+
 * text=auto eol=lf
-*.ts text eol=lf
-*.js text eol=lf
-*.json text eol=lf
-*.md text eol=lf
-*.yml text eol=lf
-*.yaml text eol=lf
-.env text eol=lf
-Dockerfile text eol=lf
+
+# Explicitly binary — never mangle these.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.gz    binary
+*.zip   binary
