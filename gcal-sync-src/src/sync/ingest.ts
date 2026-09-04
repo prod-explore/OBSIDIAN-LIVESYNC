@@ -167,7 +167,11 @@ export async function ingestGoogleData(
 
           const safeTitle     = sanitizeTitle(event.summary || 'Untitled Event');
           const shortId       = event.id.substring(0, 8);
-          const targetRelative = existingFile || `{Calendar}/${safeTitle}-${shortId}.md`;
+          // Stable creation-date prefix for chronological sort in file explorer.
+          // Uses the event start date (most meaningful for a calendar event);
+          // falls back to today if start is missing.
+          const eventDatePrefix = (event.start?.date || event.start?.dateTime?.slice(0, 10)) ?? new Date().toISOString().slice(0, 10);
+          const targetRelative = existingFile || `{Calendar}/${eventDatePrefix}-${safeTitle}-${shortId}.md`;
 
           const fullPath = resolveVaultPath(config.vaultResolved, targetRelative);
           await fs.mkdir(path.dirname(fullPath), { recursive: true });
@@ -312,9 +316,12 @@ export async function ingestGoogleData(
             }
           } else {
             // New task: write directly to the correct folder.
+            // Stable creation-date prefix — set once, never changes, enables
+            // chronological sort in the file explorer without encoding mutable state.
+            const createdPrefix = new Date().toISOString().slice(0, 10);
             targetRelative = isArchived
-              ? `${ARCHIVE_PREFIX}/{Tasks}/${safeTitle}-${shortId}.md`
-              : `{Tasks}/${safeTitle}-${shortId}.md`;
+              ? `${ARCHIVE_PREFIX}/{Tasks}/${createdPrefix}-${safeTitle}-${shortId}.md`
+              : `{Tasks}/${createdPrefix}-${safeTitle}-${shortId}.md`;
           }
 
           // Write to the target first. If we crash before the unlink below,

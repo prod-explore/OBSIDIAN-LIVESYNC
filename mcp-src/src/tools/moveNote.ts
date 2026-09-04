@@ -6,6 +6,8 @@ import { resolveVaultPath } from '../security.js';
 import { moveToTrash } from '../trash.js';
 import { ok, fail, ToolContext } from './types.js';
 
+import { updateBacklinks } from './refactorLinks.js';
+
 /**
  * Moves/renames a note within the vault.
  *
@@ -17,11 +19,12 @@ import { ok, fail, ToolContext } from './types.js';
  * - If it DOES overwrite, the clobbered file is moved to `.trash/` first.
  * - Uses fs.rename (atomic on the same filesystem/volume), not copy+delete, so a
  *   crash mid-operation can't leave two copies or zero copies of the note.
+ * - Updates backlinks to point to the new filename so we don't break the graph.
  */
 export function registerMoveNote(server: McpServer, { config }: ToolContext): void {
   server.tool(
     'move_note',
-    'Moves or renames a note within the vault. Fails if destination exists unless overwrite is set (clobbered file goes to trash).',
+    'Moves or renames a note within the vault. Fails if destination exists unless overwrite is set (clobbered file goes to trash). Automatically updates backlinks.',
     {
       from: z.string().describe('Current path of the note, relative to the vault root'),
       to: z.string().describe('Destination path, relative to the vault root'),
@@ -53,10 +56,18 @@ export function registerMoveNote(server: McpServer, { config }: ToolContext): vo
         await fs.mkdir(path.dirname(toPath), { recursive: true });
         await fs.rename(fromPath, toPath);
         
-        if (trashedPath) {
-          return ok(`Moved ${from} → ${to} (overwritten file backed up to ${trashedPath})`);
+        // Update backlinks across the vault
+        let updatedCount = 0;
+        try {
+          updatedCount = await updateBacklinks(config.vaultResolved, from, to);
+        } catch (err: any) {
+          console.error('Failed to update backlinks:', err);
         }
-        return ok(`Moved ${from} → ${to}`);
+        
+        if (trashedPath) {
+          return ok(`Moved ${from} → ${to} (overwritten file backed up to ${trashedPath}). Updated ${updatedCount} backlink(s).`);
+        }
+        return ok(`Moved ${from} → ${to}. Updated ${updatedCount} backlink(s).`);
       } catch (err: any) {
         return fail(`Error moving note: ${err.message}`);
       }
