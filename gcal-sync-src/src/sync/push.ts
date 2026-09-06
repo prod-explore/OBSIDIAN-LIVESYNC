@@ -218,7 +218,7 @@ async function handleFile(
       const fromArchive = relFolder.startsWith(`${ARCHIVE_PREFIX}/`);
       await pushTaskNote(tasks, config, state, fullPath, file, frontmatter, body, isNew, fromArchive);
     } else {
-      await pushCalendarNote(calendar, config, state, fullPath, file, frontmatter, body, isNew);
+      await pushCalendarNote(calendar, config, state, fullPath, relFolder, file, frontmatter, body, isNew);
     }
   } catch (err: any) {
     // Clear push_pending if we set it but then threw, so the next cycle retries cleanly.
@@ -339,6 +339,7 @@ async function pushCalendarNote(
   config: Config,
   state: SyncState,
   fullPath: string,
+  relFolder: string,
   file: string,
   frontmatter: Record<string, any>,
   body: string,
@@ -412,16 +413,26 @@ async function pushCalendarNote(
     const shortId   = (frontmatter.google_id as string).substring(0, 8);
     const idealRelative = `{Calendar}/${yearStr}/${monthStr}/${datePart}-${timePart}-${safeTitle}-${shortId}.md`;
 
-    // Build current relative path for comparison.
-    // relFolder is passed in via the outer closure (push.ts handleFile → pushCalendarNote).
-    // We reconstruct it from fullPath vs vaultResolved.
-    const vaultResolved = config.vaultResolved;
-    const currentRelative = path.relative(vaultResolved, fullPath).replace(/\\/g, '/');
+    // Build current relative path from the args we already have — this is
+    // more reliable than path.relative() which can produce backslashes or
+    // wrong case on Windows.
+    const currentRelative = `${relFolder}/${file}`.replace(/\\/g, '/');
 
     if (currentRelative !== idealRelative) {
-      const { renameAndRefactorLinks } = await import('./refactor.js');
-      await renameAndRefactorLinks(vaultResolved, currentRelative, idealRelative);
-      console.log(`[Push] Relocated event: ${currentRelative} → ${idealRelative}`);
+      // Guard: ingest may have already moved this file to idealRelative in the
+      // same cycle (e.g. Google returned a reschedule that ingest processed
+      // first). If fullPath is already gone, the refactor is a no-op.
+      try {
+        await fs.access(fullPath);
+        const { renameAndRefactorLinks } = await import('./refactor.js');
+        await renameAndRefactorLinks(config.vaultResolved, currentRelative, idealRelative);
+        console.log(`[Push] Relocated event: ${currentRelative} → ${idealRelative}`);
+      } catch (err: any) {
+        if (err.code !== 'ENOENT') {
+          console.error(`[Push] Could not relocate ${file}:`, err.message);
+        }
+        // ENOENT = ingest already moved it — nothing to do.
+      }
     }
   }
 
