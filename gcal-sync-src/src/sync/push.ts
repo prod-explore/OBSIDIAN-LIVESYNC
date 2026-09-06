@@ -44,18 +44,33 @@ async function pushFolder(
 
   const allFiles: { file: string; relFolder: string }[] = [];
 
-  for (const relFolder of foldersToScan) {
+  // Recursive walker — needed for Calendar's YYYY/MM/ sub-structure.
+  async function collectFiles(relFolder: string): Promise<void> {
+    let folderPath: string;
     try {
-      const folderPath = resolveVaultPath(config.vaultResolved, relFolder);
-      const files = await fs.readdir(folderPath);
-      for (const file of files) {
-        if (file.endsWith('.md') && !file.startsWith('README')) {
-          allFiles.push({ file, relFolder });
-        }
-      }
+      folderPath = resolveVaultPath(config.vaultResolved, relFolder);
+    } catch {
+      return; // path traversal guard
+    }
+    let entries: import('fs').Dirent[];
+    try {
+      entries = await fs.readdir(folderPath, { withFileTypes: true });
     } catch (err: any) {
       if (err.code !== 'ENOENT') console.error(`[Push] Error reading ${relFolder}:`, err.message);
+      return;
     }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      if (entry.isDirectory()) {
+        await collectFiles(`${relFolder}/${entry.name}`);
+      } else if (entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('README')) {
+        allFiles.push({ file: entry.name, relFolder });
+      }
+    }
+  }
+
+  for (const relFolder of foldersToScan) {
+    await collectFiles(relFolder);
   }
 
   for (const { file, relFolder } of allFiles) {
@@ -380,6 +395,35 @@ async function pushCalendarNote(
   frontmatter.synced_at = new Date().toISOString();
   frontmatter.sync_hash = computeSyncHash(frontmatter);
   await fs.writeFile(fullPath, serializeNote(frontmatter, body), 'utf-8');
+
+  // After writing, check if this file should live at a different (canonical)
+  // path: {Calendar}/YYYY/MM/YYYY-MM-DD-HHMM-title-shortId.md
+  // This fires when the user edits the title or start time in Obsidian and
+  // the change has just been pushed to Google.
+  if (frontmatter.google_id && frontmatter.start) {
+    const startRaw  = frontmatter.start as string;
+    const datePart  = startRaw.slice(0, 10);
+    const timePart  = startRaw.includes('T')
+      ? startRaw.slice(11, 16).replace(':', '') // "HH:MM" → "HHMM"
+      : '0000';
+    const yearStr   = datePart.slice(0, 4);
+    const monthStr  = datePart.slice(5, 7);
+    const safeTitle = sanitizeTitle(summary);
+    const shortId   = (frontmatter.google_id as string).substring(0, 8);
+    const idealRelative = `{Calendar}/${yearStr}/${monthStr}/${datePart}-${timePart}-${safeTitle}-${shortId}.md`;
+
+    // Build current relative path for comparison.
+    // relFolder is passed in via the outer closure (push.ts handleFile → pushCalendarNote).
+    // We reconstruct it from fullPath vs vaultResolved.
+    const vaultResolved = config.vaultResolved;
+    const currentRelative = path.relative(vaultResolved, fullPath).replace(/\\/g, '/');
+
+    if (currentRelative !== idealRelative) {
+      const { renameAndRefactorLinks } = await import('./refactor.js');
+      await renameAndRefactorLinks(vaultResolved, currentRelative, idealRelative);
+      console.log(`[Push] Relocated event: ${currentRelative} → ${idealRelative}`);
+    }
+  }
 
   // Keep manifest in sync.
   if (frontmatter.google_id) {

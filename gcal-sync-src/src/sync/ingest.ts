@@ -19,10 +19,11 @@ function addToManifest(manifest: Record<string, string[]>, key: string, id: stri
 }
 
 /**
- * Searches both the active folder and its archive mirror for a file whose
- * frontmatter contains the given google_id. Active folder is checked first
- * so that any duplicate (from a previous failed unlink) resolves to the active
- * copy rather than the stale archive copy.
+ * Recursively searches a folder (and its archive mirror) for a .md file whose
+ * frontmatter contains the given google_id.  Recursion is needed so that
+ * Calendar events stored under {Calendar}/YYYY/MM/ are found correctly.
+ * Active folder is checked before the archive mirror so that any duplicate
+ * from a previous failed unlink resolves to the active copy.
  *
  * Returns a vault-relative path (forward slashes), or null if not found.
  */
@@ -32,34 +33,49 @@ async function findFileByGoogleId(
   googleId: string
 ): Promise<string | null> {
   const foldersToSearch = [folderRelative, `${ARCHIVE_PREFIX}/${folderRelative}`];
-  for (const folder of foldersToSearch) {
+
+  async function walkFolder(folder: string): Promise<string | null> {
     let folderPath: string;
     try {
       folderPath = resolveVaultPath(vaultRoot, folder);
     } catch {
-      continue; // path traversal guard rejected it — skip
+      return null; // path traversal guard
     }
-    let files: string[];
+
+    let entries: import('fs').Dirent[];
     try {
-      files = await fs.readdir(folderPath);
+      entries = await fs.readdir(folderPath, { withFileTypes: true });
     } catch (err: any) {
       if (err.code !== 'ENOENT') console.error(`[Ingest] Error reading ${folder}:`, err.message);
-      continue;
+      return null;
     }
-    for (const file of files) {
-      if (!file.endsWith('.md')) continue;
-      const fullPath = path.join(folderPath, file);
-      let content: string;
-      try {
-        content = await fs.readFile(fullPath, 'utf-8');
-      } catch {
-        continue; // file disappeared between readdir and readFile
-      }
-      const { frontmatter } = parseNote(content);
-      if (frontmatter.google_id === googleId) {
-        return path.join(folder, file).replace(/\\/g, '/');
+
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+
+      if (entry.isDirectory()) {
+        const found = await walkFolder(`${folder}/${entry.name}`);
+        if (found) return found;
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        const fullPath = path.join(folderPath, entry.name);
+        let content: string;
+        try {
+          content = await fs.readFile(fullPath, 'utf-8');
+        } catch {
+          continue;
+        }
+        const { frontmatter } = parseNote(content);
+        if (frontmatter.google_id === googleId) {
+          return `${folder}/${entry.name}`.replace(/\\/g, '/');
+        }
       }
     }
+    return null;
+  }
+
+  for (const folder of foldersToSearch) {
+    const found = await walkFolder(folder);
+    if (found) return found;
   }
   return null;
 }
@@ -165,17 +181,38 @@ export async function ingestGoogleData(
           frontmatter.synced_at = new Date().toISOString();
           frontmatter.sync_hash = computeSyncHash(frontmatter);
 
-          const safeTitle     = sanitizeTitle(event.summary || 'Untitled Event');
-          const shortId       = event.id.substring(0, 8);
-          // Stable creation-date prefix for chronological sort in file explorer.
-          // Uses the event start date (most meaningful for a calendar event);
-          // falls back to today if start is missing.
-          const eventDatePrefix = (event.start?.date || event.start?.dateTime?.slice(0, 10)) ?? new Date().toISOString().slice(0, 10);
-          const targetRelative = existingFile || `{Calendar}/${eventDatePrefix}-${safeTitle}-${shortId}.md`;
+          const safeTitle = sanitizeTitle(event.summary || 'Untitled Event');
+          const shortId   = event.id.substring(0, 8);
 
-          const fullPath = resolveVaultPath(config.vaultResolved, targetRelative);
+          // Build the canonical (ideal) path for this event:
+          //   {Calendar}/YYYY/MM/YYYY-MM-DD-HHMM-title-shortId.md
+          //
+          // Date + time come from Google (authoritative). HHMM = "0000" for
+          // all-day events that have no dateTime. This gives correct
+          // chronological sort both inside a month folder and across months.
+          const startRaw    = event.start?.dateTime || event.start?.date || '';
+          const datePart    = startRaw.slice(0, 10) || new Date().toISOString().slice(0, 10);
+          const timePart    = event.start?.dateTime
+            ? event.start.dateTime.slice(11, 16).replace(':', '') // "HH:MM" → "HHMM"
+            : '0000';
+          const yearStr     = datePart.slice(0, 4);
+          const monthStr    = datePart.slice(5, 7);
+          const idealRelative = `{Calendar}/${yearStr}/${monthStr}/${datePart}-${timePart}-${safeTitle}-${shortId}.md`;
+
+          // For a new file: write directly to its ideal location.
+          // For an existing file: write in place first (crash-safe), then
+          // call renameAndRefactorLinks to relocate + rewrite wikilinks if
+          // the ideal path differs (e.g. the event was rescheduled).
+          const writeRelative = existingFile ?? idealRelative;
+          const fullPath = resolveVaultPath(config.vaultResolved, writeRelative);
           await fs.mkdir(path.dirname(fullPath), { recursive: true });
           await fs.writeFile(fullPath, serializeNote(frontmatter, body), 'utf-8');
+
+          if (existingFile && existingFile !== idealRelative) {
+            const { renameAndRefactorLinks } = await import('./refactor.js');
+            await renameAndRefactorLinks(config.vaultResolved, existingFile, idealRelative);
+            console.log(`[Ingest] Relocated event: ${existingFile} → ${idealRelative}`);
+          }
 
           addToManifest(state.knownEventIds, calId, event.id);
         }
