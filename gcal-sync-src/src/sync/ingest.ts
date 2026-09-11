@@ -7,6 +7,7 @@ import { parseNote, serializeNote } from '../markdown/frontmatter.js';
 import { sanitizeTitle, resolveVaultPath } from '../markdown/paths.js';
 import { computeSyncHash } from './hash.js';
 import { ARCHIVE_PREFIX, isPastMonth } from './archive.js';
+import { tasklistsCache, fetchTasklists, defaultTasklistId } from './tasklists.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -265,7 +266,13 @@ export async function ingestGoogleData(
   // =========================================================================
   // 2. INGEST TASKS
   // =========================================================================
-  for (const tasklistId of config.tasklistIds) {
+  if (!tasklistsCache) await fetchTasklists(tasks);
+  const listsToSync = tasklistsCache || [];
+
+  for (const listObj of listsToSync) {
+    const tasklistId = listObj.id!;
+    const isDefault = tasklistId === defaultTasklistId;
+    const listName = sanitizeTitle(listObj.title || 'Untitled List');
     const lastSync = state.tasksTokens[tasklistId];
     let pageToken: string | undefined = undefined;
     let maxUpdated: string | undefined = lastSync;
@@ -385,9 +392,11 @@ export async function ingestGoogleData(
             // Stable creation-date prefix — set once, never changes, enables
             // chronological sort in the file explorer without encoding mutable state.
             const createdPrefix = new Date().toISOString().slice(0, 10);
+            const activeFolder = isDefault ? `{Tasks}` : `{Tasks}/${listName}`;
+            const archiveFolder = isDefault ? `${ARCHIVE_PREFIX}/{Tasks}` : `${ARCHIVE_PREFIX}/{Tasks}/${listName}`;
             targetRelative = isArchived
-              ? `${ARCHIVE_PREFIX}/{Tasks}/${createdPrefix}-${safeTitle}-${shortId}.md`
-              : `{Tasks}/${createdPrefix}-${safeTitle}-${shortId}.md`;
+              ? `${archiveFolder}/${createdPrefix}-${safeTitle}-${shortId}.md`
+              : `${activeFolder}/${createdPrefix}-${safeTitle}-${shortId}.md`;
           }
 
           // Write to the target first. If we crash before the unlink below,
