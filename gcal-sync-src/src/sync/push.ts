@@ -428,14 +428,16 @@ async function pushCalendarNote(
   }
 
   if (frontmatter.start) {
-    payload.start = frontmatter.start.includes('T')
-      ? { dateTime: frontmatter.start }
-      : { date: frontmatter.start };
+    const startStr = frontmatter.start instanceof Date ? frontmatter.start.toISOString() : String(frontmatter.start);
+    payload.start = startStr.includes('T')
+      ? { dateTime: startStr }
+      : { date: startStr };
   }
   if (frontmatter.end) {
-    payload.end = frontmatter.end.includes('T')
-      ? { dateTime: frontmatter.end }
-      : { date: frontmatter.end };
+    const endStr = frontmatter.end instanceof Date ? frontmatter.end.toISOString() : String(frontmatter.end);
+    payload.end = endStr.includes('T')
+      ? { dateTime: endStr }
+      : { date: endStr };
   }
 
   let res: { data: calendar_v3.Schema$Event };
@@ -475,7 +477,7 @@ async function pushCalendarNote(
   // the calendar simply rolls over into a new month, and the change has just
   // been pushed to (or already matches) Google.
   if (frontmatter.google_id && frontmatter.start) {
-    const startRaw  = frontmatter.start as string;
+    const startRaw  = frontmatter.start instanceof Date ? frontmatter.start.toISOString() : String(frontmatter.start);
     const datePart  = startRaw.slice(0, 10);
     const timePart  = startRaw.includes('T')
       ? startRaw.slice(11, 16).replace(':', '') // "HH:MM" → "HHMM"
