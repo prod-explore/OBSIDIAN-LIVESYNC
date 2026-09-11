@@ -125,6 +125,11 @@ export async function ingestGoogleData(
 
           const existingFile = await findFileByGoogleId(config.vaultResolved, '{Calendar}', event.id);
 
+          // If Google says it's cancelled but we don't have it locally, don't bother creating a cancelled note for it.
+          if (event.status === 'cancelled' && !existingFile) {
+            continue;
+          }
+
           let frontmatter: Record<string, any> = {
             type: 'event',
             google_id: event.id,
@@ -223,17 +228,24 @@ export async function ingestGoogleData(
           // corrected back into the current/future, isPastMonth() flips back
           // to false and the existing relocate-on-mismatch logic below moves
           // it back out of the archive automatically.
-          const startRaw    = event.start?.dateTime || event.start?.date || '';
-          const datePart    = startRaw.slice(0, 10) || new Date().toISOString().slice(0, 10);
-          const timePart    = event.start?.dateTime
-            ? event.start.dateTime.slice(11, 16).replace(':', '') // "HH:MM" → "HHMM"
-            : '0000';
-          const yearStr     = datePart.slice(0, 4);
-          const monthStr    = datePart.slice(5, 7);
-          const activeIdealRelative = `{Calendar}/${yearStr}-${monthStr}/${datePart}-${timePart}-${safeTitle}-${shortId}.md`;
-          const idealRelative = isPastMonth(datePart)
-            ? `${ARCHIVE_PREFIX}/${activeIdealRelative}`
-            : activeIdealRelative;
+          let idealRelative: string;
+          if (event.status === 'cancelled' && existingFile) {
+            // Cancelled events from Google lack start/summary. Do not attempt to rename/relocate them,
+            // as this would collapse all cancelled instances into a single "Untitled Event" today.
+            idealRelative = existingFile;
+          } else {
+            const startRaw    = event.start?.dateTime || event.start?.date || '';
+            const datePart    = startRaw.slice(0, 10) || new Date().toISOString().slice(0, 10);
+            const timePart    = event.start?.dateTime
+              ? event.start.dateTime.slice(11, 16).replace(':', '') // "HH:MM" → "HHMM"
+              : '0000';
+            const yearStr     = datePart.slice(0, 4);
+            const monthStr    = datePart.slice(5, 7);
+            const activeIdealRelative = `{Calendar}/${yearStr}-${monthStr}/${datePart}-${timePart}-${safeTitle}-${shortId}.md`;
+            idealRelative = isPastMonth(datePart)
+              ? `${ARCHIVE_PREFIX}/${activeIdealRelative}`
+              : activeIdealRelative;
+          }
 
           // For a new file: write directly to its ideal location.
           // For an existing file: write in place first (crash-safe), then
