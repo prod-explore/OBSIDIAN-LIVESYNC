@@ -321,10 +321,32 @@ See [`AGENTS.md`](./AGENTS.md) for conventions to follow when adding or changing
 
 This repository includes a standalone background service (`obsidian-gcal-sync`) that continuously bidirectionally synchronizes Google Calendar events and Google Tasks with your Obsidian vault. It is **not** an MCP tool, but it operates directly on the vault's Markdown files, allowing the AI agent (and you) to enrich them with context.
 
-### Features & Limitations (v1)
-- **Ingest**: Fully pulls new events/tasks from Google and creates or updates files in `{Calendar}` and `{Tasks}`.
-- **Push**: **Only updates frontmatter.** Changes to the event/task `status`, `start`, `end`, and `due` dates are pushed back to Google.
-- **Title and Body edits are NEVER pushed back.** This guarantees your local notes and AI context are never accidentally clobbered by Google's API limitations or length constraints.
+### Features & Limitations
+
+- **Ingest**: Fully pulls new/changed events and tasks from Google and creates or updates files in `{Calendar}` and `{Tasks}`.
+- **Push**: **Only frontmatter fields sync to Google** — `title`, `status`, `start`/`end` (events), `due` (tasks), and `description` (→ Google's notes/description field).
+- **The Markdown body (everything below the `---` frontmatter block) is never read from or written to Google, in either direction.** It's exclusively yours and the AI agent's space for context, notes, and reflections — Google's API limitations or length constraints can never clobber it.
+- **File organization (Calendar)**: events are stored nested by date —
+  `{Calendar}/YYYY/MM/YYYY-MM-DD-HHMM-Title-shortId.md` (all-day events use
+  `0000` for HHMM). This keeps files in correct chronological order both
+  within a month folder and across months. If an event's title or start
+  time changes (from either side), the file is renamed/relocated to match,
+  and every `[[wikilink]]` to it elsewhere in the vault is automatically
+  rewritten to the new name (`src/sync/refactor.ts`).
+- **Archiving**: both Tasks and Calendar events move into `04-Archive/...`
+  once they're no longer "active," and move back out automatically if that
+  ever reverses — the vault's active folders only ever show what's
+  current:
+  - **Tasks** archive on Google status `completed`/`cancelled` →
+    `04-Archive/{Tasks}/`.
+  - **Calendar events** archive once their entire month has passed
+    (an event earlier this month stays active until the month is over) →
+    `04-Archive/{Calendar}/YYYY/MM/...`, same filename/path shape as the
+    active folder. This runs as an independent sweep every sync cycle
+    (`sync/archive-sweep.ts`) rather than only reacting to a Google or
+    local change — an event nobody touches would otherwise never be
+    re-evaluated once Calendar's incremental `syncToken` stops returning
+    it, and would sit in the active folder forever past its month.
 - **Conflict Resolution**: If a file is modified locally and updated remotely on Google at the same time, Google wins. Your local changes are appended to `_Systems/sync-conflicts.md` so no data is ever silently lost. Deletes on Google only "soft-delete" (status: cancelled) locally.
 
 ### Setup Instructions

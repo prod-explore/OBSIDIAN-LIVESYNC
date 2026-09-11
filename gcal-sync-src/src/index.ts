@@ -4,6 +4,7 @@ import { createGoogleClient } from './google/client.js';
 import { StateManager } from './sync/state.js';
 import { ingestGoogleData } from './sync/ingest.js';
 import { pushVaultData } from './sync/push.js';
+import { sweepCalendarArchive } from './sync/archive-sweep.js';
 
 let isSyncing = false;
 
@@ -25,6 +26,9 @@ async function runSyncCycle() {
     
     console.log('[Push] Pushing local changes to Google...');
     await pushVaultData(config, state, calendar, tasks);
+
+    console.log('[Archive Sweep] Checking for past-month events to archive...');
+    await sweepCalendarArchive(config);
 
     await stateManager.save(state);
     console.log(`--- Sync Cycle Completed Successfully ---\n`);

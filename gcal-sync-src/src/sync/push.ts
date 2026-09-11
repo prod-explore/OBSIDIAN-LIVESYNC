@@ -6,8 +6,7 @@ import { SyncState } from './state.js';
 import { parseNote, serializeNote } from '../markdown/frontmatter.js';
 import { resolveVaultPath, sanitizeTitle } from '../markdown/paths.js';
 import { computeSyncHash } from './hash.js';
-
-const ARCHIVE_PREFIX = '04-Archive';
+import { ARCHIVE_PREFIX, isPastMonth } from './archive.js';
 
 // ---------------------------------------------------------------------------
 // Main push function
@@ -398,9 +397,11 @@ async function pushCalendarNote(
   await fs.writeFile(fullPath, serializeNote(frontmatter, body), 'utf-8');
 
   // After writing, check if this file should live at a different (canonical)
-  // path: {Calendar}/YYYY/MM/YYYY-MM-DD-HHMM-title-shortId.md
-  // This fires when the user edits the title or start time in Obsidian and
-  // the change has just been pushed to Google.
+  // path: {Calendar}/YYYY/MM/YYYY-MM-DD-HHMM-title-shortId.md, or under
+  // 04-Archive/{Calendar}/... once its month has fully passed (isPastMonth).
+  // This fires when the user edits the title/start time in Obsidian, or when
+  // the calendar simply rolls over into a new month, and the change has just
+  // been pushed to (or already matches) Google.
   if (frontmatter.google_id && frontmatter.start) {
     const startRaw  = frontmatter.start as string;
     const datePart  = startRaw.slice(0, 10);
@@ -411,7 +412,10 @@ async function pushCalendarNote(
     const monthStr  = datePart.slice(5, 7);
     const safeTitle = sanitizeTitle(summary);
     const shortId   = (frontmatter.google_id as string).substring(0, 8);
-    const idealRelative = `{Calendar}/${yearStr}/${monthStr}/${datePart}-${timePart}-${safeTitle}-${shortId}.md`;
+    const activeIdealRelative = `{Calendar}/${yearStr}-${monthStr}/${datePart}-${timePart}-${safeTitle}-${shortId}.md`;
+    const idealRelative = isPastMonth(datePart)
+      ? `${ARCHIVE_PREFIX}/${activeIdealRelative}`
+      : activeIdealRelative;
 
     // Build current relative path from the args we already have — this is
     // more reliable than path.relative() which can produce backslashes or
@@ -424,9 +428,12 @@ async function pushCalendarNote(
       // first). If fullPath is already gone, the refactor is a no-op.
       try {
         await fs.access(fullPath);
+        const wasArchived = currentRelative.startsWith(`${ARCHIVE_PREFIX}/`);
+        const nowArchived = idealRelative.startsWith(`${ARCHIVE_PREFIX}/`);
+        const verb = !wasArchived && nowArchived ? 'Archived' : wasArchived && !nowArchived ? 'Unarchived' : 'Relocated';
         const { renameAndRefactorLinks } = await import('./refactor.js');
         await renameAndRefactorLinks(config.vaultResolved, currentRelative, idealRelative);
-        console.log(`[Push] Relocated event: ${currentRelative} → ${idealRelative}`);
+        console.log(`[Push] ${verb} event: ${currentRelative} → ${idealRelative}`);
       } catch (err: any) {
         if (err.code !== 'ENOENT') {
           console.error(`[Push] Could not relocate ${file}:`, err.message);
