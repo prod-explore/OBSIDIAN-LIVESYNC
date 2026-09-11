@@ -126,7 +126,7 @@ async function pushFolder(
     // push_pending flag was never cleared (extremely rare).
     // ------------------------------------------------------------------
     if (frontmatter.push_pending === true && frontmatter.google_id) {
-      frontmatter.push_pending = undefined;
+      delete frontmatter.push_pending;
       frontmatter.synced_at    = new Date().toISOString();
       await fs.writeFile(fullPath, serializeNote(frontmatter, body), 'utf-8');
       continue;
@@ -224,7 +224,7 @@ async function handleFile(
     // Clear push_pending if we set it but then threw, so the next cycle retries cleanly.
     if (frontmatter.push_pending) {
       try {
-        frontmatter.push_pending = undefined;
+        delete frontmatter.push_pending;
         await fs.writeFile(fullPath, serializeNote(frontmatter, body), 'utf-8');
       } catch { /* ignore secondary write failure */ }
     }
@@ -303,7 +303,7 @@ async function pushTaskNote(
 
     // Phase 2 — commit the real google_id.
     frontmatter.google_id    = res.data.id!;
-    frontmatter.push_pending = undefined;
+    delete frontmatter.push_pending;
     frontmatter.source       = 'obsidian';
     console.log(`[Push] Created task ${res.data.id} → ${file}`);
   } else {
@@ -433,7 +433,7 @@ async function pushCalendarNote(
 
     // Phase 2 — commit real ID.
     frontmatter.google_id    = res.data.id!;
-    frontmatter.push_pending = undefined;
+    delete frontmatter.push_pending;
     frontmatter.source       = 'obsidian';
     console.log(`[Push] Created event ${res.data.id} → ${file}`);
   } else {
