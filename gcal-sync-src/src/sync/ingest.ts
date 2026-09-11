@@ -112,6 +112,16 @@ export async function ingestGoogleData(
 
         for (const event of events) {
           if (!event.id) continue;
+          
+          // Cap infinite recurring events: ignore instances further than ~2 years (730 days) in the future.
+          if (event.start?.dateTime || event.start?.date) {
+            const startMs = new Date(event.start.dateTime || event.start.date!).getTime();
+            const daysAhead = (startMs - Date.now()) / (1000 * 60 * 60 * 24);
+            if (daysAhead > 730) {
+              continue; // Do not ingest into Obsidian, do not add to knownEventIds
+            }
+          }
+
 
           const existingFile = await findFileByGoogleId(config.vaultResolved, '{Calendar}', event.id);
 
