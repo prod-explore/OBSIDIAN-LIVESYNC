@@ -7,6 +7,7 @@ import { parseNote, serializeNote } from '../markdown/frontmatter.js';
 import { resolveVaultPath, sanitizeTitle } from '../markdown/paths.js';
 import { computeSyncHash } from './hash.js';
 import { ARCHIVE_PREFIX, isPastMonth } from './archive.js';
+import { resolveTasklistId } from './tasklists.js';
 
 // ---------------------------------------------------------------------------
 // Main push function
@@ -215,7 +216,7 @@ async function handleFile(
   try {
     if (folder === '{Tasks}') {
       const fromArchive = relFolder.startsWith(`${ARCHIVE_PREFIX}/`);
-      await pushTaskNote(tasks, config, state, fullPath, file, frontmatter, body, isNew, fromArchive);
+      await pushTaskNote(tasks, config, state, fullPath, relFolder, file, frontmatter, body, isNew, fromArchive);
     } else {
       await pushCalendarNote(calendar, config, state, fullPath, relFolder, file, frontmatter, body, isNew);
     }
@@ -240,13 +241,42 @@ async function pushTaskNote(
   config: Config,
   state: SyncState,
   fullPath: string,
+  relFolder: string,
   file: string,
   frontmatter: Record<string, any>, // mutated in-place so callers see google_id etc.
   body: string,
   isNew: boolean,
   fromArchive: boolean
 ) {
-  const tasklistId: string = frontmatter.tasklist_id || config.tasklistIds[0];
+  let listName = '@default';
+  const folderParts = relFolder.split('/');
+  // Example relFolders:
+  // "{Tasks}" -> length 1
+  // "04-Archive/{Tasks}" -> length 2 (handled via fromArchive? actually we want listName from archive too)
+  // "{Tasks}/Project A" -> length 2 -> Project A
+  // "04-Archive/{Tasks}/Project A" -> length 3 -> Project A
+  const tasksIndex = folderParts.indexOf('{Tasks}');
+  if (tasksIndex !== -1 && tasksIndex < folderParts.length - 1) {
+    listName = folderParts[tasksIndex + 1];
+  }
+
+  const targetListId = await resolveTasklistId(tasks, listName) || config.tasklistIds[0];
+
+  if (!isNew && frontmatter.google_id && frontmatter.tasklist_id && frontmatter.tasklist_id !== targetListId) {
+    // The task was moved to a new list (subfolder) in Obsidian!
+    // Delete the old task from Google API
+    try {
+      await tasks.tasks.delete({ tasklist: frontmatter.tasklist_id, task: frontmatter.google_id });
+      console.log(`[Push] Task moved list. Deleted old google_id ${frontmatter.google_id} from ${frontmatter.tasklist_id}`);
+    } catch (e: any) {
+      console.log(`[Push] Task moved list, but delete failed (404?). Ignoring.`);
+    }
+    // Convert into a "new" task to be inserted into the new list.
+    delete frontmatter.google_id;
+    isNew = true;
+  }
+
+  const tasklistId: string = targetListId;
 
   const title: string =
     frontmatter.title ||
