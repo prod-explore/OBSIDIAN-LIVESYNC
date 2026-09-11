@@ -142,11 +142,25 @@ async function pushFolder(
       ? frontmatter.sync_hash !== currentHash
       : (frontmatter.synced_at ? stat.mtimeMs > new Date(frontmatter.synced_at).getTime() + 2000 : false);
 
+    let isMoved = false;
+    if (folder === '{Tasks}' && !isNew) {
+      let listName = '@default';
+      const folderParts = relFolder.split('/');
+      const tasksIndex = folderParts.indexOf('{Tasks}');
+      if (tasksIndex !== -1 && tasksIndex < folderParts.length - 1) {
+        listName = folderParts[tasksIndex + 1];
+      }
+      const targetListId = await resolveTasklistId(tasks, listName) || config.tasklistIds[0];
+      if (frontmatter.tasklist_id && frontmatter.tasklist_id !== targetListId) {
+        isMoved = true;
+      }
+    }
+
     // Skip Google-originated files that haven't been locally touched.
     if (isNew && frontmatter.source === 'google') continue;
 
     // Nothing changed locally.
-    if (!isNew && !locallyModified) continue;
+    if (!isNew && !locallyModified && !isMoved) continue;
 
     await handleFile(folder, relFolder, file, fullPath, frontmatter, body, config, state, calendar, tasks, isNew);
 
