@@ -6,8 +6,7 @@ import { SyncState } from './state.js';
 import { parseNote, serializeNote } from '../markdown/frontmatter.js';
 import { sanitizeTitle, resolveVaultPath } from '../markdown/paths.js';
 import { computeSyncHash } from './hash.js';
-
-const ARCHIVE_PREFIX = '04-Archive';
+import { ARCHIVE_PREFIX, isPastMonth } from './archive.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -190,6 +189,14 @@ export async function ingestGoogleData(
           // Date + time come from Google (authoritative). HHMM = "0000" for
           // all-day events that have no dateTime. This gives correct
           // chronological sort both inside a month folder and across months.
+          //
+          // If the event's month has fully passed, the canonical path moves
+          // under 04-Archive/{Calendar}/... instead — same YYYY/MM/filename,
+          // just relocated, so the active {Calendar} folder only ever lists
+          // the current and future months. Reversible: if the date is ever
+          // corrected back into the current/future, isPastMonth() flips back
+          // to false and the existing relocate-on-mismatch logic below moves
+          // it back out of the archive automatically.
           const startRaw    = event.start?.dateTime || event.start?.date || '';
           const datePart    = startRaw.slice(0, 10) || new Date().toISOString().slice(0, 10);
           const timePart    = event.start?.dateTime
@@ -197,21 +204,28 @@ export async function ingestGoogleData(
             : '0000';
           const yearStr     = datePart.slice(0, 4);
           const monthStr    = datePart.slice(5, 7);
-          const idealRelative = `{Calendar}/${yearStr}/${monthStr}/${datePart}-${timePart}-${safeTitle}-${shortId}.md`;
+          const activeIdealRelative = `{Calendar}/${yearStr}-${monthStr}/${datePart}-${timePart}-${safeTitle}-${shortId}.md`;
+          const idealRelative = isPastMonth(datePart)
+            ? `${ARCHIVE_PREFIX}/${activeIdealRelative}`
+            : activeIdealRelative;
 
           // For a new file: write directly to its ideal location.
           // For an existing file: write in place first (crash-safe), then
           // call renameAndRefactorLinks to relocate + rewrite wikilinks if
-          // the ideal path differs (e.g. the event was rescheduled).
+          // the ideal path differs (e.g. the event was rescheduled, or its
+          // month just became past/current).
           const writeRelative = existingFile ?? idealRelative;
           const fullPath = resolveVaultPath(config.vaultResolved, writeRelative);
           await fs.mkdir(path.dirname(fullPath), { recursive: true });
           await fs.writeFile(fullPath, serializeNote(frontmatter, body), 'utf-8');
 
           if (existingFile && existingFile !== idealRelative) {
+            const wasArchived = existingFile.startsWith(`${ARCHIVE_PREFIX}/`);
+            const nowArchived = idealRelative.startsWith(`${ARCHIVE_PREFIX}/`);
+            const verb = !wasArchived && nowArchived ? 'Archived' : wasArchived && !nowArchived ? 'Unarchived' : 'Relocated';
             const { renameAndRefactorLinks } = await import('./refactor.js');
             await renameAndRefactorLinks(config.vaultResolved, existingFile, idealRelative);
-            console.log(`[Ingest] Relocated event: ${existingFile} → ${idealRelative}`);
+            console.log(`[Ingest] ${verb} event: ${existingFile} → ${idealRelative}`);
           }
 
           addToManifest(state.knownEventIds, calId, event.id);
