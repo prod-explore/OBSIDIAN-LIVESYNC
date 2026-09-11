@@ -355,6 +355,30 @@ async function pushCalendarNote(
   // frontmatter.description → Google description. Body stays private.
   if (frontmatter.description != null) payload.description = String(frontmatter.description);
 
+  if (frontmatter.reminders !== undefined) {
+    if (Array.isArray(frontmatter.reminders)) {
+      if (frontmatter.reminders.length === 1 && frontmatter.reminders[0] === 'default') {
+        payload.reminders = { useDefault: true };
+      } else if (frontmatter.reminders.length > 0) {
+        const overrides = frontmatter.reminders.map((r: any) => {
+          const str = String(r).trim().toLowerCase();
+          const val = parseInt(str, 10) || 0;
+          let minutes = val;
+          if (str.endsWith('h')) minutes = val * 60;
+          else if (str.endsWith('d')) minutes = val * 1440;
+          return { method: 'popup', minutes };
+        });
+        payload.reminders = { useDefault: false, overrides };
+      } else {
+        payload.reminders = { useDefault: false, overrides: [] };
+      }
+    } else if (frontmatter.reminders === 'default' || frontmatter.reminders === true) {
+      payload.reminders = { useDefault: true };
+    } else if (frontmatter.reminders === null || frontmatter.reminders === false) {
+      payload.reminders = { useDefault: false, overrides: [] };
+    }
+  }
+
   if (frontmatter.start) {
     payload.start = frontmatter.start.includes('T')
       ? { dateTime: frontmatter.start }

@@ -176,6 +176,21 @@ export async function ingestGoogleData(
           // The Markdown body below --- is Obsidian-only and never touched here.
           if (event.description != null) frontmatter.description = event.description;
 
+          if (event.reminders) {
+            if (event.reminders.useDefault) {
+              frontmatter.reminders = ['default'];
+            } else if (event.reminders.overrides) {
+              frontmatter.reminders = event.reminders.overrides.map((r: any) => {
+                const m = r.minutes || 0;
+                if (m > 0 && m % 1440 === 0) return `${m / 1440}d`;
+                if (m > 0 && m % 60 === 0) return `${m / 60}h`;
+                return `${m}m`;
+              });
+            } else {
+              delete frontmatter.reminders;
+            }
+          }
+
           frontmatter.updated   = event.updated || new Date().toISOString();
           frontmatter.synced_at = new Date().toISOString();
           frontmatter.sync_hash = computeSyncHash(frontmatter);
