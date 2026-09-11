@@ -164,12 +164,16 @@ async function pushFolder(
 
     await handleFile(folder, relFolder, file, fullPath, frontmatter, body, config, state, calendar, tasks, isNew);
 
-    // frontmatter is mutated by handleFile (google_id written for new tasks).
-    // Pick it up directly — no re-read needed, and this works correctly even
-    // when pushTaskNote renamed the file to the archive (fullPath no longer exists).
+    // frontmatter is mutated by handleFile (google_id and tasklist_id written for tasks).
+    // Recompute listId because handleFile might have moved the task to a new list.
+    const newListId: string =
+      folder === '{Tasks}'
+        ? (frontmatter.tasklist_id || config.tasklistIds[0])
+        : (frontmatter.calendar_id || config.calendarIds[0]);
+
     if (frontmatter.google_id) {
-      if (!presentIdsByList.has(listId)) presentIdsByList.set(listId, new Set());
-      presentIdsByList.get(listId)!.add(frontmatter.google_id);
+      if (!presentIdsByList.has(newListId)) presentIdsByList.set(newListId, new Set());
+      presentIdsByList.get(newListId)!.add(frontmatter.google_id);
     }
   }
 
