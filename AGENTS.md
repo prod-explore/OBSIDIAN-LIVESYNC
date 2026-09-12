@@ -92,9 +92,5 @@ If you see LiveSync config rule violations in the plugin log (`handleFilenameCas
 
 ### Backups
 
+
 Currently, there is no automated backup (relying on manual phone copies). A nightly cron `tar` snapshot on the raspi is the recommended actual fix, not yet set up.
-
-## General Agent Directives
-
-1. **Vault-First Rule:** Always use and update projects/files within the Obsidian vault if they exist. Only create local projects outside the vault if explicitly asked by the user, but once created inside the vault, always use the vault version.
-2. **Permission-Free Tools:** Use only tools that don't require human permission popups (prefer `replace_file_content`, `view_file`, and MCP tools over raw shell/powershell commands). Work stealthily and autonomously.

@@ -157,7 +157,9 @@ async function pushFolder(
     }
 
     // Skip Google-originated files that haven't been locally touched.
-    if (isNew && frontmatter.source === 'google') continue;
+    // BUT: if source=google with no google_id, it was manually restored/reset
+    // and must be re-pushed as a new item, not skipped.
+    if (isNew && frontmatter.source === 'google' && frontmatter.synced_at) continue;
 
     // Nothing changed locally.
     if (!isNew && !locallyModified && !isMoved) continue;
