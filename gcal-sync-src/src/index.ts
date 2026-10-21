@@ -7,12 +7,22 @@ import { pushVaultData } from './sync/push.js';
 import { sweepCalendarArchive } from './sync/archive-sweep.js';
 
 let isSyncing = false;
+let shuttingDown = false;
+let currentCycle: Promise<void> | null = null;
 
-async function runSyncCycle() {
-  if (isSyncing) {
-    console.log('[Skip] Previous sync cycle still running.');
-    return;
+/** How long a stop signal waits for a running cycle before giving up (compose gives the container 20s). */
+const SHUTDOWN_WAIT_MS = 15_000;
+
+function runSyncCycle(): Promise<void> {
+  if (isSyncing || shuttingDown) {
+    console.log(shuttingDown ? '[Skip] Shutting down.' : '[Skip] Previous sync cycle still running.');
+    return Promise.resolve();
   }
+  currentCycle = syncOnce().finally(() => { currentCycle = null; });
+  return currentCycle;
+}
+
+async function syncOnce() {
   isSyncing = true;
   console.log(`\n--- Starting Sync Cycle at ${new Date().toISOString()} ---`);
   try {
@@ -39,6 +49,8 @@ async function runSyncCycle() {
   }
 }
 
+let cronTask: ReturnType<typeof cron.schedule> | null = null;
+
 async function bootstrap() {
   console.log('Obsidian Google Calendar & Tasks Sync started.');
   try {
@@ -52,8 +64,8 @@ async function bootstrap() {
     await runSyncCycle();
 
     // Schedule cron
-    cron.schedule(`*/${config.pollIntervalMinutes} * * * *`, () => {
-      runSyncCycle();
+    cronTask = cron.schedule(`*/${config.pollIntervalMinutes} * * * *`, () => {
+      void runSyncCycle();
     });
 
   } catch (err: any) {
@@ -64,12 +76,21 @@ async function bootstrap() {
 
 bootstrap();
 
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down...');
+/**
+ * Stops scheduling and lets a cycle that is already running finish: it may be halfway through
+ * rewriting a note or the state file, and killing it there is how files end up truncated.
+ */
+async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received. Shutting down...`);
+  cronTask?.stop();
+  if (currentCycle) {
+    console.log('Waiting for the running sync cycle to finish...');
+    await Promise.race([currentCycle, new Promise((resolve) => setTimeout(resolve, SHUTDOWN_WAIT_MS))]);
+  }
   process.exit(0);
-});
+}
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received. Shutting down...');
-  process.exit(0);
-});
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));

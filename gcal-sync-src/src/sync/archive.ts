@@ -12,8 +12,8 @@ export const ARCHIVE_PREFIX = '04-Archive';
  * This is a whole-month comparison, not a day-count threshold: an event
  * dated earlier THIS month is not archived yet — it archives at the start
  * of next month, once its entire month is over. That matches the
- * {Calendar}/YYYY/MM/ folder layout (§ Master doc: shorten the list in the
- * active Calendar folder without losing anything or breaking sort order).
+ * {Calendar}/YYYY-MM/ folder layout: the active Calendar folder only lists
+ * the current and future months, without losing anything or breaking sort order.
  *
  * Accepts either a date ("YYYY-MM-DD") or a dateTime ("YYYY-MM-DDTHH:MM...")
  * string — only the first 7 characters (YYYY-MM) are read.

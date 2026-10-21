@@ -8,6 +8,7 @@ import { resolveVaultPath, sanitizeTitle } from '../markdown/paths.js';
 import { computeSyncHash } from './hash.js';
 import { ARCHIVE_PREFIX, isPastMonth } from './archive.js';
 import { resolveTasklistId } from './tasklists.js';
+import { isMassDeletion } from './safety.js';
 
 // ---------------------------------------------------------------------------
 // Main push function
@@ -44,7 +45,7 @@ async function pushFolder(
 
   const allFiles: { file: string; relFolder: string }[] = [];
 
-  // Recursive walker — needed for Calendar's YYYY/MM/ sub-structure.
+  // Recursive walker — needed for Calendar's YYYY-MM/ sub-structure.
   async function collectFiles(relFolder: string): Promise<void> {
     let folderPath: string;
     try {
@@ -188,9 +189,20 @@ async function pushFolder(
 
   for (const [listId, knownIds] of Object.entries(manifest)) {
     const present = presentIdsByList.get(listId) ?? new Set<string>();
+    const missing = knownIds.filter(id => !present.has(id));
 
-    for (const knownId of knownIds) {
-      if (present.has(knownId)) continue;
+    if (!config.allowMassDelete && isMassDeletion(missing.length, knownIds.length)) {
+      console.error(
+        `[Push] Refusing to delete ${missing.length} of ${knownIds.length} known records in ${folder} (list ${listId}): ` +
+        `their files vanished from the vault at once, which looks like a missing mount or an unfinished sync rather than a decision. ` +
+        `Nothing was deleted on Google. If the deletion is intended, run once with ALLOW_MASS_DELETE=true.`
+      );
+      continue;
+    }
+
+    const forgotten = new Set<string>();
+
+    for (const knownId of missing) {
 
       // File is gone — delete the corresponding Google record.
       try {
@@ -209,9 +221,12 @@ async function pushFolder(
         }
       }
 
-      // Remove from manifest.
-      manifest[listId] = knownIds.filter(id => id !== knownId);
+      forgotten.add(knownId);
     }
+
+    // Drop every id that is gone from Google from the manifest in one go. (Filtering the original
+    // list once per id would resurrect all but the last one.)
+    if (forgotten.size > 0) manifest[listId] = knownIds.filter(id => !forgotten.has(id));
   }
 }
 
@@ -473,7 +488,7 @@ async function pushCalendarNote(
   await fs.writeFile(fullPath, serializeNote(frontmatter, body), 'utf-8');
 
   // After writing, check if this file should live at a different (canonical)
-  // path: {Calendar}/YYYY/MM/YYYY-MM-DD-HHMM-title-shortId.md, or under
+  // path: {Calendar}/YYYY-MM/YYYY-MM-DD-HHMM-title-shortId.md, or under
   // 04-Archive/{Calendar}/... once its month has fully passed (isPastMonth).
   // This fires when the user edits the title/start time in Obsidian, or when
   // the calendar simply rolls over into a new month, and the change has just

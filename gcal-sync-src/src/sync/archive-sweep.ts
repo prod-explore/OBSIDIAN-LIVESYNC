@@ -14,9 +14,9 @@ import { renameAndRefactorLinks } from './refactor.js';
  * case, and exactly what "shorten the active Calendar folder" needs to
  * handle for events from a month that has simply ended.
  *
- * This sweep is independent of both: it walks the active {Calendar}/YYYY/MM/
+ * This sweep is independent of both: it walks the active {Calendar}/YYYY-MM/
  * tree directly on disk and moves anything whose month has fully passed into
- * 04-Archive/{Calendar}/YYYY/MM/ — the same relocation mechanism
+ * 04-Archive/{Calendar}/YYYY-MM/ — the same relocation mechanism
  * (renameAndRefactorLinks) ingest.ts/push.ts already use reactively, just
  * triggered by "time has passed" instead of "something changed." Filenames
  * are unchanged by the move (only the folder differs), so this never

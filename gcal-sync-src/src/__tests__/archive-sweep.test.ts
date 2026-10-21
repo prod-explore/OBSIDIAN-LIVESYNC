@@ -20,6 +20,7 @@ function fakeConfig(vaultResolved: string): Config {
     calendarIds: ['primary'],
     tasklistIds: [],
     pollIntervalMinutes: 15,
+    allowMassDelete: false,
   };
 }
 

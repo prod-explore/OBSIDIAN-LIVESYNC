@@ -21,7 +21,7 @@ function addToManifest(manifest: Record<string, string[]>, key: string, id: stri
 /**
  * Recursively searches a folder (and its archive mirror) for a .md file whose
  * frontmatter contains the given google_id.  Recursion is needed so that
- * Calendar events stored under {Calendar}/YYYY/MM/ are found correctly.
+ * Calendar events stored under {Calendar}/YYYY-MM/ are found correctly.
  * Active folder is checked before the archive mirror so that any duplicate
  * from a previous failed unlink resolves to the active copy.
  *
@@ -215,14 +215,14 @@ export async function ingestGoogleData(
           const shortId   = event.id.substring(0, 8);
 
           // Build the canonical (ideal) path for this event:
-          //   {Calendar}/YYYY/MM/YYYY-MM-DD-HHMM-title-shortId.md
+          //   {Calendar}/YYYY-MM/YYYY-MM-DD-HHMM-title-shortId.md
           //
           // Date + time come from Google (authoritative). HHMM = "0000" for
           // all-day events that have no dateTime. This gives correct
           // chronological sort both inside a month folder and across months.
           //
           // If the event's month has fully passed, the canonical path moves
-          // under 04-Archive/{Calendar}/... instead — same YYYY/MM/filename,
+          // under 04-Archive/{Calendar}/... instead — same YYYY-MM/filename,
           // just relocated, so the active {Calendar} folder only ever lists
           // the current and future months. Reversible: if the date is ever
           // corrected back into the current/future, isPastMonth() flips back

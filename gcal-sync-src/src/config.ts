@@ -9,6 +9,8 @@ export interface Config {
   calendarIds: string[];
   tasklistIds: string[];
   pollIntervalMinutes: number;
+  /** Lets push delete most of a list on Google in one cycle (see sync/safety.ts). Off unless ALLOW_MASS_DELETE=true. */
+  allowMassDelete: boolean;
 }
 
 export function loadConfig(): Config {
@@ -30,9 +32,10 @@ export function loadConfig(): Config {
   const calendarIds = calendarIdsRaw.split(',').map((id) => id.trim()).filter(Boolean);
   const tasklistIds = tasklistIdsRaw.split(',').map((id) => id.trim()).filter(Boolean);
 
-  const pollIntervalMinutes = parseInt(process.env.POLL_INTERVAL_MINUTES || '5', 10);
-  if (isNaN(pollIntervalMinutes) || pollIntervalMinutes < 1) {
-    throw new Error('POLL_INTERVAL_MINUTES must be a positive integer');
+  // The schedule is a cron expression (*/n * * * *), which only allows 1-59.
+  const pollIntervalMinutes = Number(process.env.POLL_INTERVAL_MINUTES || '5');
+  if (!Number.isInteger(pollIntervalMinutes) || pollIntervalMinutes < 1 || pollIntervalMinutes > 59) {
+    throw new Error('POLL_INTERVAL_MINUTES must be a whole number from 1 to 59');
   }
 
   return {
@@ -44,5 +47,6 @@ export function loadConfig(): Config {
     calendarIds,
     tasklistIds,
     pollIntervalMinutes,
+    allowMassDelete: process.env.ALLOW_MASS_DELETE === 'true',
   };
 }
