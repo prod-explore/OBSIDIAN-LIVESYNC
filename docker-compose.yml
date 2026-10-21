@@ -1,37 +1,55 @@
-version: "3.9"
+# Headless Obsidian + CouchDB (LiveSync) + MCP server + Google Calendar/Tasks sync.
+#
+#   docker network create obsidian      # once; a reverse proxy in another compose project joins it too
+#   cp .env.example .env                # then fill it in
+#   docker compose up -d --build
+
+# Docker keeps container logs forever by default; on a Raspberry Pi that is the SD card.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   couchdb:
+    # Consider pinning a tag you have tested (couchdb:3.x) so a major upgrade is a decision, not a pull.
     image: couchdb:latest
     container_name: obsidian-couchdb
     restart: unless-stopped
     environment:
-      - COUCHDB_USER=${COUCHDB_USER}
-      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD}
+      - COUCHDB_USER=${COUCHDB_USER:?set COUCHDB_USER in .env}
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD:?set COUCHDB_PASSWORD in .env}
     volumes:
       - ./data:/opt/couchdb/data
       - ./local.ini:/opt/couchdb/etc/local.d/obsidian.ini
     networks:
       - obsidian
+    logging: *default-logging
 
   obsidian-headless:
     image: lscr.io/linuxserver/obsidian:latest
     container_name: obsidian-headless
     restart: unless-stopped
     shm_size: "1gb"
+    # Electron needs this; it is the one container here that runs without the default seccomp profile.
     security_opt:
       - seccomp:unconfined
     environment:
       - PUID=1000
       - PGID=1000
       - TZ=Europe/Warsaw
-      - CUSTOM_USER=${VNC_USER}
-      - PASSWORD=${VNC_PASSWORD}
+      - CUSTOM_USER=${VNC_USER:?set VNC_USER in .env}
+      - PASSWORD=${VNC_PASSWORD:?set VNC_PASSWORD in .env}
+    # Only while setting the vault up: uncomment, reach it through an SSH tunnel, comment it out again.
+    # ports:
+    #   - "127.0.0.1:3000:3000"
     volumes:
       - ./config:/config
       - ./vault:/vault
     networks:
       - obsidian
+    logging: *default-logging
 
   obsidian-mcp:
     build:
@@ -40,15 +58,25 @@ services:
     container_name: obsidian-mcp
     restart: unless-stopped
     environment:
-      - MCP_API_KEY=${MCP_API_KEY}
+      - MCP_API_KEY=${MCP_API_KEY:?set MCP_API_KEY in .env}
+      - MCP_INSTRUCTIONS=${MCP_INSTRUCTIONS:-}
       - VAULT_PATH=/vault/vault-mcp
+    # Same uid as headless Obsidian, or it cannot write into folders this server creates.
     user: "1000:1000"
-#    ports:
-#      - "3000:3000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    # Not published: the reverse proxy reaches it as obsidian-mcp:3000 over the shared network.
+    # ports:
+    #   - "127.0.0.1:3000:3000"
     volumes:
       - ./vault:/vault:rw
     networks:
       - obsidian
+    logging: *default-logging
 
   obsidian-gcal-sync:
     build:
@@ -56,6 +84,8 @@ services:
       dockerfile: Dockerfile
     container_name: obsidian-gcal-sync
     restart: unless-stopped
+    # A cycle that is mid-write gets time to finish when the container is stopped.
+    stop_grace_period: 20s
     environment:
       - VAULT_PATH=/vault/vault-mcp
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
@@ -64,14 +94,22 @@ services:
       - CALENDAR_IDS=${CALENDAR_IDS:-primary}
       - TASKLIST_IDS=${TASKLIST_IDS:-@default}
       - POLL_INTERVAL_MINUTES=${POLL_INTERVAL_MINUTES:-5}
+      - ALLOW_MASS_DELETE=${ALLOW_MASS_DELETE:-false}
       - DATA_PATH=/data
       - TZ=Europe/Warsaw
     user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - ./vault:/vault:rw
       - ./gcal-sync-state:/data
     networks:
       - obsidian
+    logging: *default-logging
 
 networks:
   obsidian:
