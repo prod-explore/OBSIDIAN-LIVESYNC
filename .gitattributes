@@ -1,4 +1,4 @@
-﻿# Force LF line endings in the repo (source of truth for the Pi/Linux target).
+# Force LF line endings in the repo (source of truth for the Pi/Linux target).
 # Windows users with core.autocrlf=true still get CRLF in their working tree
 # — this only controls what goes into Git objects.
 

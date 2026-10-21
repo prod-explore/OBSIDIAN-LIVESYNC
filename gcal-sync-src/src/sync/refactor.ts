@@ -1,4 +1,4 @@
-﻿import * as fs from 'fs/promises';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 import { resolveVaultPath } from '../markdown/paths.js';
 
