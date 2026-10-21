@@ -1,380 +1,140 @@
-# obsidian-livesync-mcp
+# Obsidian LiveSync MCP
 
-> **Self-hosted Obsidian knowledge base with a private MCP Server** — expose your personal notes to any AI agent over a secure, authenticated endpoint.
+[![CI](https://github.com/prod-explore/OBSIDIAN-LIVESYNC/actions/workflows/ci.yml/badge.svg)](https://github.com/prod-explore/OBSIDIAN-LIVESYNC/actions/workflows/ci.yml)
+![node](https://img.shields.io/badge/node-22-339933)
+![typescript](https://img.shields.io/badge/typescript-strict-3178c6)
+![license](https://img.shields.io/badge/license-MIT-blue)
 
-[![Node.js](https://img.shields.io/badge/Node.js-20-green?logo=node.js)](https://nodejs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org)
-[![Docker](https://img.shields.io/badge/Docker-Compose-blue?logo=docker)](https://www.docker.com)
-[![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP%20%2B%20SSE-purple)](https://modelcontextprotocol.io)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+A self-hosted Obsidian vault that **AI agents can read and edit through MCP**, and that **stays in sync with Google Calendar and Google Tasks**. Your notes live in your own CouchDB, on your own machine; the only thing exposed to the network is one authenticated endpoint.
 
----
+It is built around one assumption: **the client is a language model**. It can be wrong, and it can be prompt-injected by whatever it reads. So the tools are deliberately small, every path is checked, nothing is destroyed without a way back, and there is no shell.
 
-## What is this?
+## What is in the box
 
-This project turns an **Obsidian vault** (backed by CouchDB for real-time sync via the [Self-Hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync) plugin) into a private **MCP (Model Context Protocol) Server** that any AI agent can securely query.
-
-Once deployed, AI tools like **Claude Desktop**, **Cursor**, **Google Antigravity IDE**, or any MCP-compatible client can:
-
-- 📖 **Read** notes from your vault
-- ✍️ **Write** new notes or update existing ones
-- ✏️ **Edit** notes by replacing a specific range of lines — no need to rewrite the whole file
-- 🔍 **Search** notes by keyword
-- 📁 **List** a folder's immediate contents
-- 🔀 **Move / rename** notes (atomic, refuses to silently overwrite)
-- 🗑️ **Delete** notes — soft delete only, moved to `.trash/` rather than unlinked
-
-All traffic goes through an authenticated HTTPS endpoint — your notes never touch any third-party cloud.
-
----
-
-## Architecture
-
-```
-┌──────────────────────────────────────────┐
-│           AI Clients (local PC)          │
-│  Claude Desktop  │  Antigravity IDE      │
-│  Cursor / Cline  │  Claude Web           │
-└────────┬─────────┴──────────┬────────────┘
-         │  GET /mcp/sse      │  POST /mcp/sse
-         │  (Legacy SSE)      │  (Streamable HTTP)
-         ▼                    ▼
-┌─────────────────────────────────────────────┐
-│         Nginx Reverse Proxy (HTTPS)         │
-│         obsidian.yourdomain.com             │
-│  /mcp/* → obsidian-mcp:3000                 │
-│  /*     → obsidian-couchdb:5984             │
-└────────────────┬────────────────────────────┘
-                 │  Docker internal network
-    ┌────────────┼────────────────┐
-    ▼            ▼                ▼
- CouchDB    Obsidian          MCP Server
- (data)     Headless          (Node.js)
-            (LiveSync)        reads/writes
-            writes .md ──────► /vault
-```
-
-**Key design decisions:**
-- **Dual-protocol MCP**: Supports both the new `StreamableHTTP` transport (Antigravity, Cursor) and the legacy `SSE` transport (Claude Desktop) on the same endpoint — `POST /mcp/sse` vs `GET /mcp/sse`
-- **Stateless Streamable HTTP**: No session management overhead for modern clients
-- **Per-connection MCP instances**: Each SSE session gets its own isolated `McpServer` instance to prevent SDK cross-connection errors
-- **Fail-secure auth**: Token validated via `?token=` query param or `Authorization: Bearer` header; `/.well-known/oauth-*` returns clean 404 to prevent misbehaviour with OAuth-aware clients
-- **Path traversal protection**: All vault file access uses `path.resolve()` + `startsWith()` checks
-
----
-
-## Stack
-
-| Component | Technology |
+| Service | What it does |
 |---|---|
-| Notes database | [CouchDB](https://couchdb.apache.org/) |
-| Real-time sync | [Obsidian LiveSync plugin](https://github.com/vrtmrz/obsidian-livesync) |
-| MCP Server | Node.js 20, TypeScript, Express.js |
-| MCP SDK | [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) |
-| Containerization | Docker + Docker Compose |
-| Reverse Proxy | Nginx + Let's Encrypt (Certbot) |
+| `obsidian-couchdb` | The database behind [Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync): your devices sync notes through it |
+| `obsidian-headless` | Obsidian itself, headless, running the LiveSync plugin to turn the database into plain Markdown files |
+| [`obsidian-mcp`](mcp-src) | The MCP server: seven tools over those files (Streamable HTTP and legacy SSE) |
+| [`obsidian-gcal-sync`](gcal-sync-src) | Two-way sync of Google Calendar events and Google Tasks with Markdown notes in the vault |
 
----
+```mermaid
+flowchart LR
+  subgraph Clients
+    AI["AI clients<br/>Claude Desktop · Cursor · Antigravity"]
+    DEV["Your devices<br/>Obsidian + LiveSync plugin"]
+  end
+  subgraph Host["Docker host · shared network 'obsidian'"]
+    PROXY["nginx<br/>HTTPS"]
+    MCP["obsidian-mcp<br/>7 tools"]
+    COUCH[("CouchDB")]
+    OBS["headless Obsidian<br/>+ LiveSync"]
+    GSYNC["obsidian-gcal-sync"]
+    VAULT[("vault/<br/>Markdown files")]
+  end
+  GOOGLE[("Google Calendar<br/>& Tasks")]
+  AI -- "/mcp/ + token" --> PROXY --> MCP
+  DEV -- "CouchDB API" --> PROXY --> COUCH
+  OBS <--> COUCH
+  OBS <--> VAULT
+  MCP <--> VAULT
+  GSYNC <--> VAULT
+  GSYNC <--> GOOGLE
+```
 
-## Prerequisites
+## Safety by design
 
-- A server or SBC (e.g. Raspberry Pi 4+) running Linux with Docker & Docker Compose installed
-- A domain name pointed to your server's public IP
-- SSL certificate (managed by Certbot, already configured in the Nginx setup)
-- Obsidian app on at least one device with the **Self-Hosted LiveSync** plugin
+| Concern | What this project does |
+|---|---|
+| Leaving the vault | Every path goes through `resolveVaultPath()`: `..`, absolute paths **and symbolic links** that lead out (or nowhere) are refused, for reads and for writes. Search and folder walks never follow links. Unit-tested against real links on disk. |
+| Destroying a note | `delete_note` moves to `.trash/`. `write_note` and `move_note` refuse to overwrite unless told to, and the replaced file goes to `.trash/` first. No tool deletes or moves recursively, and none can run a command. |
+| A wrong `move_note` | Backlinks are rewritten, but a link that is only a name is left alone when another note shares it (it may mean the other one), and files whose content would not change are not touched, so LiveSync does not re-upload them. |
+| Authentication | Bearer header or `?token=`, compared in constant time over SHA-256 hashes. The server refuses to start without `MCP_API_KEY`. OAuth discovery answers with a plain 404. |
+| Containers | The MCP server and the sync run as an unprivileged user, with a read-only root filesystem, all capabilities dropped and `no-new-privileges`. Required secrets are enforced by compose (`:?`). |
+| A vault that is suddenly empty | The sync would read that as "the user deleted everything" and delete it on Google, where Tasks has no undo. A **mass-deletion guard** refuses to delete most of a list in one cycle until you say so (`ALLOW_MASS_DELETE`). |
+| Crashes | Sync state is written atomically; a corrupt file is kept aside rather than overwritten; a stopped container lets a running cycle finish. |
+| Dependencies | `npm audit` on runtime dependencies gates CI; images are built in CI; a secret scan runs on every push. |
 
----
+## Quick start
 
-## Quick Start
-
-### 1. Clone
+You need Docker with Compose, a domain pointing at the host for HTTPS, and Obsidian on at least one device.
 
 ```bash
-git clone https://github.com/yourusername/obsidian-livesync-mcp.git
-cd obsidian-livesync-mcp
+git clone https://github.com/prod-explore/OBSIDIAN-LIVESYNC.git && cd OBSIDIAN-LIVESYNC
+cp .env.example .env                 # fill in the required secrets: openssl rand -base64 32
+docker network create obsidian       # shared with your reverse proxy
+docker compose up -d --build
 ```
 
-### 2. Configure environment
+Without Google Calendar and Tasks sync, start just the first three services:
+`docker compose up -d couchdb obsidian-headless obsidian-mcp`.
 
-```bash
-cp .env.example .env
-nano .env
-```
+1. **Vault.** Headless Obsidian needs a one-time setup through its GUI: create the vault `vault-mcp` in `/vault`, install the LiveSync plugin, point it at CouchDB, fetch. Steps (with the SSH tunnel) in [`docs/operations.md`](docs/operations.md#setting-up-the-vault).
+2. **HTTPS.** [`deploy/nginx-obsidian.conf.example`](deploy/nginx-obsidian.conf.example) proxies `/mcp/` to the MCP server (no buffering, long timeouts, token kept out of the access log) and everything else to CouchDB for LiveSync.
+3. **Check.** `curl "https://obsidian.example.com/mcp/health?token=$MCP_API_KEY"` returns `{"status":"ok","vaultPath":…,"vaultExists":true,…}`.
+4. **Connect a client** (below).
 
-Fill in all three secrets:
+### Connecting a client
 
-```env
-# Secret token for MCP Server authentication
-MCP_API_KEY=your_super_secret_random_string
-
-# Credentials for CouchDB
-COUCHDB_USER=admin
-COUCHDB_PASSWORD=your_super_secret_couchdb_password
-
-# Credentials for the Obsidian GUI (VNC – only needed for initial setup)
-VNC_USER=admin
-VNC_PASSWORD=your_super_secret_vnc_password
-```
-
-> **Tip:** Generate a strong `MCP_API_KEY` with `openssl rand -base64 32`
-
-### 3. Create Docker network & start
-
-```bash
-docker network create obsidian
-docker compose up -d
-```
-
-### 4. Configure Nginx
-
-Copy `REVERSE-PROXY/conf.d/obsidian.conf` to your Nginx `conf.d/` directory, replacing `obsidian.yourdomain.com` with your actual domain. Reload Nginx after issuing a Let's Encrypt certificate.
-
-### 5. Initial Obsidian vault setup
-
-On first run, the Obsidian Headless container starts a KasmVNC GUI accessible at `http://localhost:3000` (only from the server itself via SSH tunnel or Raspberry Pi Connect):
-
-```bash
-# On your local machine:
-ssh -L 3000:localhost:3000 user@your-server
-# Then open http://localhost:3000 in your browser
-```
-
-Inside the Obsidian GUI:
-1. Create a new vault at `/vault`
-2. Install the **Self-Hosted LiveSync** plugin
-3. Configure it to connect to `http://obsidian-couchdb:5984` with your CouchDB credentials
-4. Click **Fetch** to pull your existing notes from the database
-
-After setup, the GUI is no longer needed. Remove the port mapping from `docker-compose.yml` and restart.
-
----
-
-## MCP Tools
-
-The server exposes the following tools to AI agents:
-
-### `get_path`
-Reads a note **or** lists a folder — auto-detected from the path. One tool instead of two keeps the schema smaller.
-```
-path: "Folder/My Note.md"   # reads the note
-path: "Folder"              # lists the folder's immediate children
-path: ""                    # lists the vault root
-```
-
-### `get_vault_tree`
-Returns a full recursive snapshot of every path in the vault (directory and file names only — no content). Skips `.trash/` and all dotfiles/dotdirs.
-
-**Recommended calling convention for agents:** call on first vault contact per session, and again after > 5 minutes of inactivity. This prevents operating on stale paths when files have been moved or renamed outside the current session (e.g. via Obsidian on a phone).
-```
-(no arguments)
-```
-
-### `write_note`
-Creates or overwrites a Markdown note in the vault (creates missing directories automatically).
-```
-path: "Folder/New Note.md"
-content: "# Hello\n\nThis note was written by an AI agent."
-```
-
-### `edit_note`
-Replaces a range of lines in an existing note without touching the rest of the file. Read the note first to determine line numbers. Setting `end_line` to `start_line - 1` inserts `new_content` without removing any lines; passing an empty `new_content` deletes the specified lines.
-```
-path:        "Folder/My Note.md"
-start_line:  5         # first line to replace (1-indexed)
-end_line:    7         # last line to replace (inclusive)
-new_content: "Updated paragraph text."
-```
-
-### `search_notes`
-Recursively searches all `.md` files for a keyword (case-insensitive, matches filename and content).
-```
-query: "project ideas"
-```
-
-### `move_note`
-Moves or renames a note. Atomic (`fs.rename`, not copy+delete). Refuses to overwrite an existing file at the destination unless you explicitly opt in.
-```
-from: "Inbox/draft.md"
-to: "02-Areas/Health/draft.md"
-overwrite: false   # default
-```
-
-### `delete_note`
-Soft delete only — moves the note into a `.trash/` folder inside the vault with a timestamp prefix, rather than calling `unlink`. Nothing this tool does is unrecoverable; worst case, go dig the file back out of `.trash/`.
-```
-path: "Old Notes/stale.md"
-```
-
----
-
-## AI Client Configuration
-
-### Claude Desktop
-
-Edit `%LOCALAPPDATA%\Claude-3p\claude_desktop_config.json` (Windows) or `~/.config/Claude/claude_desktop_config.json` (macOS/Linux):
+Claude Desktop, Cursor, Cline, Antigravity — anything that speaks MCP over HTTP:
 
 ```json
 {
   "mcpServers": {
     "obsidian": {
       "type": "sse",
-      "url": "https://obsidian.yourdomain.com/mcp/sse?token=YOUR_MCP_API_KEY"
+      "url": "https://obsidian.example.com/mcp/sse?token=YOUR_MCP_API_KEY"
     }
   }
 }
 ```
 
-### Google Antigravity / Cursor / Cline
+Clients that can send headers should use `Authorization: Bearer YOUR_MCP_API_KEY` instead and leave the token out of the URL. Both transports share the endpoint: `POST /mcp/sse` is Streamable HTTP (stateless, one server per request), `GET /mcp/sse` is legacy SSE (one isolated server per connection, closed after at most an hour so abandoned connections cannot pile up; clients reconnect).
 
-Create `.agents/mcp_config.json` in your project root (workspace-scoped), or `~/.gemini/config/mcp_config.json` (global):
+## MCP tools
 
-```json
-{
-  "mcpServers": {
-    "obsidian": {
-      "type": "sse",
-      "url": "https://obsidian.yourdomain.com/mcp/sse?token=YOUR_MCP_API_KEY"
-    }
-  }
-}
-```
+| Tool | Arguments | Notes |
+|---|---|---|
+| `get_path` | `path` (default: vault root) | Reads a note, or lists a folder's immediate children. One tool instead of two keeps the schema small. |
+| `get_vault_tree` | `path`, `depth` (default 1, `-1` = unlimited) | Path listing only, no content. Skips dotfiles and `.trash/`. Agents are told to call it on first contact and after idling, so they do not act on stale paths. |
+| `search_notes` | `query` | Case-insensitive match on file names and content. Stops at 100 results and says so. |
+| `write_note` | `path`, `content`, `overwrite` (default `false`) | Creates folders as needed. Replacing an existing note moves the old one to `.trash/`. |
+| `edit_note` | `path`, `start_line`, `end_line`, `new_content` | Replaces a line range (1-indexed, inclusive). `end_line = start_line - 1` inserts; empty `new_content` deletes the lines. |
+| `move_note` | `from`, `to`, `overwrite` (default `false`) | Atomic rename; rewrites backlinks (wikilinks with headings and aliases, and Markdown links). |
+| `delete_note` | `path` | Soft delete into `.trash/`, timestamp-prefixed. |
 
----
+What the server tells a client when it connects is configurable with `MCP_INSTRUCTIONS` (by default: read `_Systems/AGENTS.md` in the vault, if you keep one). Other settings are listed in [`docs/operations.md`](docs/operations.md#mcp-server).
 
-## Operations
+## Google Calendar & Tasks sync
+
+`obsidian-gcal-sync` polls every few minutes (`POLL_INTERVAL_MINUTES`, 1–59) and keeps Markdown notes and Google in step.
+
+- **Layout.** Folder names are literal, braces included: tasks live in `{Tasks}/` (a subfolder is a Google task list, created if missing), events in `{Calendar}/YYYY-MM/YYYY-MM-DD-HHMM-Title-shortId.md` (`0000` for all-day events). Renaming or re-dating an event moves its file and rewrites every `[[wikilink]]` to it.
+- **What syncs.** Only frontmatter: `title`, `status`, `start`/`end` (events), `due` (tasks) and `description`. Reminders are mirrored into frontmatter too. **The Markdown body is never read from or written to Google**, in either direction — it is yours and your agent's space for context.
+- **Archiving.** Completed or cancelled tasks move to `04-Archive/{Tasks}/`; events move to `04-Archive/{Calendar}/…` once their whole month has passed, and come back if that reverses.
+- **Conflicts.** If a note was edited locally while Google changed too, Google wins and your version is appended to `_Systems/sync-conflicts.md`. A deletion on Google only marks the note cancelled locally; deleting the note deletes the record on Google (behind the mass-deletion guard above).
+
+Setup: create a Google Cloud project, enable the Calendar and Tasks APIs and create an OAuth client (Desktop app). Put `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` into `.env`, then get a refresh token on a machine with a browser:
 
 ```bash
-# Start everything
-docker compose up -d
-
-# Rebuild MCP server after code changes
-docker compose up -d --build obsidian-mcp
-
-# Stop GUI + MCP, keep database running
-docker stop obsidian-headless obsidian-mcp
-
-# View MCP server logs
-docker logs -f obsidian-mcp
-
-# Reload Nginx config
-cd REVERSE-PROXY && docker compose restart
-
-# Health check
-curl "https://obsidian.yourdomain.com/mcp/health?token=YOUR_MCP_API_KEY"
-# → {"status":"ok","vaultPath":"/vault"}
+cd gcal-sync-src && npm ci && npm run get-token   # reads ../.env, listens on localhost:3000 for Google's redirect
 ```
 
----
+Add the printed `GOOGLE_REFRESH_TOKEN` to `.env` and run `docker compose up -d --build obsidian-gcal-sync`.
 
-## Security
-
-| Layer | Mechanism |
-|---|---|
-| Transport | HTTPS with Let's Encrypt certificate |
-| Authentication | Bearer token (`?token=` or `Authorization: Bearer`), compared with `crypto.timingSafeEqual` over SHA-256 hashes (not `===`, which leaks timing information) |
-| Path traversal | `path.resolve()` + `startsWith()` on every file operation — unit tested, see `mcp-src/src/__tests__/` |
-| Destructive operations | `delete_note` never calls `unlink` — moves to `.trash/` instead. `move_note` refuses to overwrite an existing destination unless told to. |
-| SSE session lifecycle | Sessions are swept on a timer if a client disconnects without firing `close` (e.g. a phone sleeping mid-connection), bounding worst-case memory growth on long-running deployments |
-| Obsidian GUI | No host port exposed post-setup |
-| OAuth confusion | Nginx returns plain 404 on `/.well-known/oauth-*` |
-| SSE buffering | `gzip off` + `proxy_buffering off` on `/mcp/` block |
-
----
+Known limits: the `{Tasks}`, `{Calendar}` and `04-Archive` folder names are fixed, and the sync is for one Google account.
 
 ## Development
 
 ```bash
-cd mcp-src
-npm install
-npm test          # type-checks, builds, runs the unit test suite
-npm run dev        # tsc --watch + node --watch for local iteration
+cd mcp-src && npm ci && npm test            # strict type-check, build, 58 tests
+cd gcal-sync-src && npm ci && npm test      # strict type-check, build, 30 tests
 ```
 
-Source is organized by responsibility rather than as one file:
+CI runs both, plus `npm audit` on runtime dependencies, a Docker build of each image, a validation of the compose file and a secret scan. The tests include real symbolic links on disk, an HTTP-level suite for the server (auth, both transports, the list of tools) and a simulated vault outage for the sync.
 
-```
-mcp-src/src/
-├── config.ts          # env loading/validation
-├── security.ts         # path traversal guard + constant-time auth compare
-├── server.ts           # express app, transports, auth middleware, SSE session sweep
-├── index.ts             # entrypoint — wires config + server, handles graceful shutdown
-├── tools/
-│   ├── types.ts         # shared result helpers (ok/fail)
-│   ├── getPath.ts       # get_path: read note OR list folder (replaces read_note + list_folder)
-│   ├── vaultTree.ts     # get_vault_tree: recursive path snapshot
-│   ├── writeNote.ts
-│   ├── editNote.ts
-│   ├── searchNotes.ts
-│   ├── moveNote.ts
-│   ├── deleteNote.ts
-│   └── index.ts         # registers all tools onto a server instance
-└── __tests__/
-    ├── security.test.ts
-    └── getPath.test.ts
-```
-
-See [`AGENTS.md`](./AGENTS.md) for conventions to follow when adding or changing tools — especially around what this project will and won't expose to an AI agent.
-
----
-
-## Calendar & Tasks Sync
-
-This repository includes a standalone background service (`obsidian-gcal-sync`) that continuously bidirectionally synchronizes Google Calendar events and Google Tasks with your Obsidian vault. It is **not** an MCP tool, but it operates directly on the vault's Markdown files, allowing the AI agent (and you) to enrich them with context.
-
-### Features & Limitations
-
-- **Ingest**: Fully pulls new/changed events and tasks from Google and creates or updates files in `{Calendar}` and `{Tasks}`.
-- **Push**: **Only frontmatter fields sync to Google** — `title`, `status`, `start`/`end` (events), `due` (tasks), and `description` (→ Google's notes/description field).
-- **The Markdown body (everything below the `---` frontmatter block) is never read from or written to Google, in either direction.** It's exclusively yours and the AI agent's space for context, notes, and reflections — Google's API limitations or length constraints can never clobber it.
-- **File organization (Calendar)**: events are stored nested by date —
-  `{Calendar}/YYYY/MM/YYYY-MM-DD-HHMM-Title-shortId.md` (all-day events use
-  `0000` for HHMM). This keeps files in correct chronological order both
-  within a month folder and across months. If an event's title or start
-  time changes (from either side), the file is renamed/relocated to match,
-  and every `[[wikilink]]` to it elsewhere in the vault is automatically
-  rewritten to the new name (`src/sync/refactor.ts`).
-- **Archiving**: both Tasks and Calendar events move into `04-Archive/...`
-  once they're no longer "active," and move back out automatically if that
-  ever reverses — the vault's active folders only ever show what's
-  current:
-  - **Tasks** archive on Google status `completed`/`cancelled` →
-    `04-Archive/{Tasks}/`.
-  - **Calendar events** archive once their entire month has passed
-    (an event earlier this month stays active until the month is over) →
-    `04-Archive/{Calendar}/YYYY/MM/...`, same filename/path shape as the
-    active folder. This runs as an independent sweep every sync cycle
-    (`sync/archive-sweep.ts`) rather than only reacting to a Google or
-    local change — an event nobody touches would otherwise never be
-    re-evaluated once Calendar's incremental `syncToken` stops returning
-    it, and would sit in the active folder forever past its month.
-- **Conflict Resolution**: If a file is modified locally and updated remotely on Google at the same time, Google wins. Your local changes are appended to `_Systems/sync-conflicts.md` so no data is ever silently lost. Deletes on Google only "soft-delete" (status: cancelled) locally.
-
-### Setup Instructions
-
-1. **Obtain Google OAuth Credentials**: Create a Google Cloud project, enable the Calendar API and Tasks API, and create an OAuth Client ID (Desktop app).
-2. **Generate a Refresh Token**:
-   ```bash
-   cd gcal-sync-src
-   npm run get-token
-   ```
-   Follow the console instructions to log in via your browser. The terminal will print a refresh token.
-3. **Configure Environment Variables**:
-   Copy `.env.example` to `.env` and fill in your details:
-   ```env
-   GOOGLE_CLIENT_ID=your_client_id
-   GOOGLE_CLIENT_SECRET=your_client_secret
-   GOOGLE_REFRESH_TOKEN=token_from_step_2
-   CALENDAR_IDS=primary
-   TASKLIST_IDS=@default
-   POLL_INTERVAL_MINUTES=5
-   ```
-4. **Deploy**:
-   ```bash
-   docker compose up -d --build
-   ```
-
----
+Conventions for changing or adding tools — especially what this project will never hand to an agent — are in [`AGENTS.md`](AGENTS.md). Running it day to day (backups, recovering notes, file ownership, logs) is in [`docs/operations.md`](docs/operations.md).
 
 ## License
 
-MIT — use freely, self-host happily.
+[MIT](LICENSE)

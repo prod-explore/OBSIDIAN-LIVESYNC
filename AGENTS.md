@@ -7,9 +7,11 @@ typical side project.
 
 ## Before touching anything
 
-1. `cd mcp-src && npm test` — must pass before *and* after your change.
-2. `npx tsc --noEmit` — this project runs in `strict` mode. Don't loosen it
-   to make an error disappear; fix the type.
+1. `npm test` in `mcp-src/` (and in `gcal-sync-src/` if you touch the sync) —
+   it type-checks, builds and runs every test, and must pass before *and*
+   after your change.
+2. Both packages run TypeScript in `strict` mode. Don't loosen it to make an
+   error disappear; fix the type.
 3. If you're not sure whether a change is safe, prefer the smaller, more
    reversible option and say so in the PR/commit description.
 
@@ -78,19 +80,6 @@ conversation about why: shell execution, permanent (non-trash) delete,
 recursive folder delete/move, arbitrary HTTP fetch from within a tool, or
 anything that reads `.env`/secrets back to the client.
 
-## Ops & Troubleshooting Notes
+## Operations
 
-### Incident: vault sync broke post-deploy (resolved)
-
-**Root cause:** `obsidian-mcp` container was writing files as `root`, while `obsidian-headless` runs as `PUID=1000`. Headless couldn't `mkdir`/write into root-owned folders (`EACCES`), which cascaded into ~18 files stuck as "possibly unprocessed" and sync getting suspended.
-
-**Fix applied:** `chown -R 1000:1000` on `/vault`, added `user: "1000:1000"` to `obsidian-mcp` in `docker-compose.yml`. A `USER node` directive is now also baked into `mcp-src/Dockerfile` itself, so a future `docker compose build` can't silently reintroduce root-owned files if the compose override ever gets removed.
-
-### LiveSync Config
-
-If you see LiveSync config rule violations in the plugin log (`handleFilenameCaseSensitive`, `usePluginSyncV2`, `customChunkSize`), it's worth aligning these across devices (phone + headless) to avoid future config-mismatch weirdness.
-
-### Backups
-
-
-Currently, there is no automated backup (relying on manual phone copies). A nightly cron `tar` snapshot on the raspi is the recommended actual fix, not yet set up.
+Deployment, backups and troubleshooting live in [`docs/operations.md`](docs/operations.md).
