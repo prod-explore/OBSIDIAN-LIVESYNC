@@ -11,6 +11,22 @@ export interface Config {
   sseSessionMaxAgeMs: number;
   /** How often (ms) the sweep checks for stale SSE sessions. */
   sseSweepIntervalMs: number;
+  /** Sent to every client on connect (MCP `instructions`); undefined = send none. */
+  instructions: string | undefined;
+}
+
+/** What clients are told when MCP_INSTRUCTIONS is not set. A vault can ship its own rules file. */
+export const DEFAULT_INSTRUCTIONS =
+  'Before any vault operation, read `_Systems/AGENTS.md` — it contains vault structure, access rules, and the navigation algorithm.';
+
+/**
+ * MCP_INSTRUCTIONS overrides the default text; the value `none` sends no instructions at all.
+ * Unset and empty both mean "default", so a compose file can pass the variable through safely.
+ */
+export function resolveInstructions(env: NodeJS.ProcessEnv): string | undefined {
+  const value = env.MCP_INSTRUCTIONS?.trim();
+  if (!value) return DEFAULT_INSTRUCTIONS;
+  return value.toLowerCase() === 'none' ? undefined : value;
 }
 
 /**
@@ -34,5 +50,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     trashDir: env.TRASH_DIR || '.trash',
     sseSessionMaxAgeMs: Number(env.SSE_SESSION_MAX_AGE_MS) || 60 * 60 * 1000, // 1h
     sseSweepIntervalMs: Number(env.SSE_SWEEP_INTERVAL_MS) || 5 * 60 * 1000, // 5m
+    instructions: resolveInstructions(env),
   };
 }

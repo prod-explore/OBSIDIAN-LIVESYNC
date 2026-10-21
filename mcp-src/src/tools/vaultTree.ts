@@ -18,7 +18,7 @@ import { ok, fail, ToolContext } from './types.js';
  * ── Recommended calling convention ──
  * 1. First vault contact per session: get_vault_tree() — depth=1 for orientation.
  * 2. After >5 min idle: same, to catch moves/renames that happened outside session.
- * 3. Exploring a specific area: get_vault_tree("02-Areas/The Protocol", depth=-1).
+ * 3. Exploring a specific area: get_vault_tree("Projects/Website", depth=-1).
  */
 export function registerVaultTree(server: McpServer, { config }: ToolContext): void {
   server.tool(
