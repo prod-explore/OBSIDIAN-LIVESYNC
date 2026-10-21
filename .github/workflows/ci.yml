@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# CI only reads the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [mcp-src, gcal-sync-src]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+      - run: npm ci
+      - run: npm test # type-checks (strict), builds, runs every test
+
+  audit:
+    name: npm audit (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [mcp-src, gcal-sync-src]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Runtime dependencies only; high and critical advisories fail the build.
+      - run: npm audit --omit=dev --audit-level=high
+
+  images:
+    name: docker build (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [mcp-src, gcal-sync-src]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build ${{ matrix.package }}
+
+  compose:
+    name: docker compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the compose file against .env.example
+        run: |
+          cp .env.example .env
+          # The required secrets are empty in the example on purpose; compose must reject that ...
+          if docker compose config -q 2>/dev/null; then echo "compose accepted empty secrets"; exit 1; fi
+          # ... and accept the file once they are filled in.
+          MCP_API_KEY=ci COUCHDB_PASSWORD=ci VNC_PASSWORD=ci docker compose config -q
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
