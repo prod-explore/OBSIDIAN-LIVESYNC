@@ -62,8 +62,8 @@ const server = http.createServer(async (req, res) => {
         }, 1000);
       }
     }
-  } catch (err: any) {
-    console.error('Error exchanging token:', err.message);
+  } catch (err) {
+    console.error('Error exchanging token:', err instanceof Error ? err.message : String(err));
     res.end('Error! Check terminal.');
     process.exit(1);
   }

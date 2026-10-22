@@ -1,92 +1,75 @@
 import cron from 'node-cron';
+import * as path from 'path';
 import { loadConfig } from './config.js';
-import { createGoogleClient } from './google/client.js';
-import { StateManager } from './sync/state.js';
-import { ingestGoogleData } from './sync/ingest.js';
-import { pushVaultData } from './sync/push.js';
-import { sweepCalendarArchive } from './sync/archive-sweep.js';
+import { runCycle } from './cycle.js';
+import { errorMessage } from './errors.js';
+import { logger } from './logger.js';
+import { statusFilePath } from './status.js';
+import { dataDir, StateManager } from './sync/state.js';
 
-let isSyncing = false;
-let shuttingDown = false;
-let currentCycle: Promise<void> | null = null;
+const log = logger.child({ scope: 'sync' });
 
 /** How long a stop signal waits for a running cycle before giving up (compose gives the container 20s). */
 const SHUTDOWN_WAIT_MS = 15_000;
 
-function runSyncCycle(): Promise<void> {
-  if (isSyncing || shuttingDown) {
-    console.log(shuttingDown ? '[Skip] Shutting down.' : '[Skip] Previous sync cycle still running.');
-    return Promise.resolve();
-  }
-  currentCycle = syncOnce().finally(() => { currentCycle = null; });
-  return currentCycle;
-}
-
-async function syncOnce() {
-  isSyncing = true;
-  console.log(`\n--- Starting Sync Cycle at ${new Date().toISOString()} ---`);
-  try {
-    const config = loadConfig();
-    const { calendar, tasks } = createGoogleClient(config);
-    const stateManager = new StateManager();
-    const state = await stateManager.load();
-
-    console.log('[Ingest] Pulling updates from Google...');
-    await ingestGoogleData(config, state, calendar, tasks);
-    
-    console.log('[Push] Pushing local changes to Google...');
-    await pushVaultData(config, state, calendar, tasks);
-
-    console.log('[Archive Sweep] Checking for past-month events to archive...');
-    await sweepCalendarArchive(config);
-
-    await stateManager.save(state);
-    console.log(`--- Sync Cycle Completed Successfully ---\n`);
-  } catch (err: any) {
-    console.error('Fatal error during sync cycle:', err.message);
-  } finally {
-    isSyncing = false;
-  }
-}
-
+let isSyncing = false;
+let shuttingDown = false;
+let currentCycle: Promise<unknown> | null = null;
 let cronTask: ReturnType<typeof cron.schedule> | null = null;
 
-async function bootstrap() {
-  console.log('Obsidian Google Calendar & Tasks Sync started.');
+function bootstrap(): void {
+  log.info('Obsidian Google Calendar & Tasks sync starting');
+  let config: ReturnType<typeof loadConfig>;
   try {
-    const config = loadConfig();
-    console.log(`Vault Path: ${config.vaultResolved}`);
-    console.log(`Calendars: ${config.calendarIds.join(', ')}`);
-    console.log(`Tasklists: ${config.tasklistIds.join(', ')}`);
-    console.log(`Poll Interval: ${config.pollIntervalMinutes} minutes`);
-    
-    // Run immediately on boot
-    await runSyncCycle();
-
-    // Schedule cron
-    cronTask = cron.schedule(`*/${config.pollIntervalMinutes} * * * *`, () => {
-      void runSyncCycle();
-    });
-
-  } catch (err: any) {
-    console.error('Failed to boot sync service:', err.message);
+    config = loadConfig();
+  } catch (err) {
+    log.error('Cannot start', { error: errorMessage(err) });
     process.exit(1);
   }
-}
 
-bootstrap();
+  log.info('Configuration', {
+    vault: config.vaultResolved,
+    calendars: config.calendarIds,
+    tasklists: config.tasklistIds,
+    pollIntervalMinutes: config.pollIntervalMinutes,
+    cancelledRetentionDays: config.cancelledRetentionDays,
+  });
+
+  const dir = dataDir();
+  const stateManager = new StateManager(log, dir);
+  const statusFile = statusFilePath(path.resolve(dir));
+
+  const runSyncCycle = (): Promise<unknown> => {
+    if (isSyncing || shuttingDown) {
+      log.info(shuttingDown ? 'Skipping a cycle: shutting down' : 'Skipping a cycle: the previous one is still running');
+      return Promise.resolve();
+    }
+    isSyncing = true;
+    currentCycle = runCycle({ config, stateManager, statusFile, log }).finally(() => {
+      isSyncing = false;
+      currentCycle = null;
+    });
+    return currentCycle;
+  };
+
+  // Run immediately on boot, then on schedule.
+  void runSyncCycle().then(() => {
+    if (shuttingDown) return;
+    cronTask = cron.schedule(`*/${config.pollIntervalMinutes} * * * *`, () => void runSyncCycle());
+  });
+}
 
 /**
  * Stops scheduling and lets a cycle that is already running finish: it may be halfway through
  * rewriting a note or the state file, and killing it there is how files end up truncated.
  */
-async function shutdown(signal: string) {
+async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`${signal} received. Shutting down...`);
+  log.info('Shutting down', { signal });
   cronTask?.stop();
   if (currentCycle) {
-    console.log('Waiting for the running sync cycle to finish...');
+    log.info('Waiting for the running sync cycle to finish');
     await Promise.race([currentCycle, new Promise((resolve) => setTimeout(resolve, SHUTDOWN_WAIT_MS))]);
   }
   process.exit(0);
@@ -94,3 +77,5 @@ async function shutdown(signal: string) {
 
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('SIGINT', () => void shutdown('SIGINT'));
+
+bootstrap();

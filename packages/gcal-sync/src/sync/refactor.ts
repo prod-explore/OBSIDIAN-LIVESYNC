@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { resolveVaultPath } from '../markdown/paths.js';
+import type { SyncContext } from './context.js';
 
 /**
  * Moves a file from oldRelativePath to newRelativePath inside the vault,
@@ -14,12 +15,13 @@ import { resolveVaultPath } from '../markdown/paths.js';
  *  - Hidden directories (starting with ".") are skipped during the scan.
  */
 export async function renameAndRefactorLinks(
-  vaultRoot: string,
+  ctx: SyncContext,
   oldRelativePath: string,
   newRelativePath: string
 ): Promise<void> {
   if (oldRelativePath === newRelativePath) return;
 
+  const vaultRoot = ctx.config.vaultResolved;
   const oldAbs = resolveVaultPath(vaultRoot, oldRelativePath);
   const newAbs = resolveVaultPath(vaultRoot, newRelativePath);
 
@@ -34,7 +36,7 @@ export async function renameAndRefactorLinks(
   // shortest-path resolver still finds the file — no link rewrite needed.
   if (oldStem === newStem) return;
 
-  console.log(`[Refactor] Rewriting links: [[${oldStem}]] → [[${newStem}]]`);
+  ctx.log.info('Rewriting links', { from: oldStem, to: newStem });
 
   // Escape for use inside a RegExp.
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -79,6 +81,6 @@ export async function renameAndRefactorLinks(
 
   await walk(vaultRoot);
   if (updatedCount > 0) {
-    console.log(`[Refactor] Updated ${updatedCount} file(s).`);
+    ctx.log.info('Rewrote links', { files: updatedCount });
   }
 }

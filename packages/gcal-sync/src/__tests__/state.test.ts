@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { createLogger } from '../logger.js';
 import { StateManager } from '../sync/state.js';
+
+const quiet = createLogger({ level: 'silent' });
 
 async function withDataDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gcal-state-'));
@@ -47,7 +50,7 @@ test('a state file from an older version is zero-filled', async () => {
 test('a corrupt state file is moved aside, not silently overwritten', async () => {
   await withDataDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'sync-state.json'), '{"calendarTokens": {');
-    const state = await new StateManager().load();
+    const state = await new StateManager(quiet).load();
     assert.deepEqual(state.calendarTokens, {});
     const files = await fs.readdir(dir);
     const aside = files.find((f) => f.startsWith('sync-state.json.corrupt-'));
@@ -61,6 +64,14 @@ test('a state file that cannot be read stops the cycle instead of pretending the
   await withDataDir(async (dir) => {
     // A directory where the file should be: readFile fails with EISDIR, not ENOENT.
     await fs.mkdir(path.join(dir, 'sync-state.json'));
-    await assert.rejects(() => new StateManager().load(), (err: any) => err.code === 'EISDIR');
+    await assert.rejects(() => new StateManager().load(), (err: NodeJS.ErrnoException) => err.code === 'EISDIR');
+  });
+});
+
+test('a state that cannot be saved is an error, not a silent loss of progress', async () => {
+  await withDataDir(async (dir) => {
+    await fs.writeFile(path.join(dir, 'blocker'), 'a file where a folder is needed');
+    const manager = new StateManager(quiet, path.join(dir, 'blocker', 'inside'));
+    await assert.rejects(() => manager.save({ calendarTokens: {}, tasksTokens: {}, knownTaskIds: {}, knownEventIds: {} }));
   });
 });

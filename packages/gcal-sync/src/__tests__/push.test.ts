@@ -2,10 +2,9 @@ import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { pushVaultData } from '../sync/push.js';
 import { computeSyncHash } from '../sync/hash.js';
 import {
-  apiError, dateFromNow, emptyState, exists, fakeCalendar, fakeTasks, listNotes, makeVault, readNote, removeVaults, writeNote,
+  apiError, dateFromNow, emptyState, exists, fakeCalendar, fakeTasks, listNotes, makeVault, push, readNote, removeVaults, writeNote,
 } from './fakes.js';
 
 after(removeVaults);
@@ -24,7 +23,7 @@ test('a new task note is created in Google, and the note learns its id', async (
   await writeNote(config, '{Tasks}/Buy milk.md', { title: 'Buy milk', status: 'needsAction', due: '2031-05-04', description: 'semi-skimmed' }, 'private body');
   const tasks = fakeTasks({}, { insert: () => ({ data: { id: 'gtask-1', updated: '2026-02-01T08:00:00.000Z' } }) });
 
-  await pushVaultData(config, state, fakeCalendar().client, tasks.client);
+  await push(config, state, fakeCalendar().client, tasks.client);
 
   assert.deepEqual(tasks.calls.tasks.insert[0], {
     tasklist: 'L1',
@@ -45,7 +44,7 @@ test('a note that has not changed makes no API calls', async () => {
   await writeNote(config, '{Tasks}/Buy milk.md', synced({ title: 'Buy milk', status: 'needsAction', google_id: 'g1', tasklist_id: 'L1', source: 'google' }));
   const tasks = fakeTasks();
 
-  await pushVaultData(config, { ...emptyState(), knownTaskIds: { L1: ['g1'] } }, fakeCalendar().client, tasks.client);
+  await push(config, { ...emptyState(), knownTaskIds: { L1: ['g1'] } }, fakeCalendar().client, tasks.client);
 
   assert.deepEqual(tasks.calls.tasks.insert, []);
   assert.deepEqual(tasks.calls.tasks.patch, []);
@@ -58,7 +57,7 @@ test('an edited task note is patched in Google', async () => {
   await writeNote(config, '{Tasks}/Buy milk.md', { ...fm, title: 'Buy oat milk' });
   const tasks = fakeTasks();
 
-  await pushVaultData(config, { ...emptyState(), knownTaskIds: { L1: ['g1'] } }, fakeCalendar().client, tasks.client);
+  await push(config, { ...emptyState(), knownTaskIds: { L1: ['g1'] } }, fakeCalendar().client, tasks.client);
 
   assert.equal(tasks.calls.tasks.patch.length, 1);
   assert.equal(tasks.calls.tasks.patch[0].task, 'g1');
@@ -73,7 +72,7 @@ test('ticking a task off in the vault completes it in Google and archives the no
   await writeNote(config, '{Tasks}/Buy milk.md', { ...fm, status: 'completed' });
   const tasks = fakeTasks();
 
-  await pushVaultData(config, { ...emptyState(), knownTaskIds: { L1: ['g1'] } }, fakeCalendar().client, tasks.client);
+  await push(config, { ...emptyState(), knownTaskIds: { L1: ['g1'] } }, fakeCalendar().client, tasks.client);
 
   assert.equal(tasks.calls.tasks.patch[0].requestBody.status, 'completed');
   assert.deepEqual(await listNotes(config), ['04-Archive/{Tasks}/Buy milk.md']);
@@ -85,7 +84,7 @@ test('moving a task note into a list folder moves the task: old one deleted, new
   await writeNote(config, '{Tasks}/Project A/Buy milk.md', synced({ title: 'Buy milk', status: 'needsAction', google_id: 'g1', tasklist_id: 'L1', source: 'google' }));
   const tasks = fakeTasks({}, { insert: () => ({ data: { id: 'g2', updated: '2026-02-01T08:00:00.000Z' } }) });
 
-  await pushVaultData(config, state, fakeCalendar().client, tasks.client);
+  await push(config, state, fakeCalendar().client, tasks.client);
 
   assert.equal(tasks.calls.lists.insert[0].requestBody.title, 'Project A');
   assert.deepEqual(tasks.calls.tasks.delete.map((c) => [c.tasklist, c.task]), [['L1', 'g1']]);
@@ -101,7 +100,7 @@ test('a folder named like a list whose title had illegal characters finds that l
   await writeNote(config, '{Tasks}/Work-Home/Ship it.md', { title: 'Ship it', status: 'needsAction' });
   const tasks = fakeTasks({ lists: [{ id: 'L1', title: 'My Tasks' }, { id: 'L2', title: 'Work/Home' }] });
 
-  await pushVaultData(config, emptyState(), fakeCalendar().client, tasks.client);
+  await push(config, emptyState(), fakeCalendar().client, tasks.client);
 
   assert.deepEqual(tasks.calls.lists.insert, []);
   assert.equal(tasks.calls.tasks.insert[0].tasklist, 'L2');
@@ -112,7 +111,7 @@ test('an insert that was interrupted (push_pending, no id) is retried', async ()
   await writeNote(config, '{Tasks}/Buy milk.md', { title: 'Buy milk', status: 'needsAction', push_pending: true, tasklist_id: 'L1' });
   const tasks = fakeTasks({}, { insert: () => ({ data: { id: 'g1', updated: '2026-02-01T08:00:00.000Z' } }) });
 
-  await pushVaultData(config, emptyState(), fakeCalendar().client, tasks.client);
+  await push(config, emptyState(), fakeCalendar().client, tasks.client);
 
   const { frontmatter } = await readNote(config, '{Tasks}/Buy milk.md');
   assert.equal(frontmatter.google_id, 'g1');
@@ -125,13 +124,13 @@ test('when Google refuses a new task the note stays as it was and the next cycle
   await writeNote(config, '{Tasks}/Buy milk.md', { title: 'Buy milk', status: 'needsAction' });
 
   const failing = fakeTasks({}, { insert: () => { throw apiError(503, 'backend unavailable'); } });
-  await assert.doesNotReject(pushVaultData(config, state, fakeCalendar().client, failing.client));
+  await assert.doesNotReject(push(config, state, fakeCalendar().client, failing.client));
   const failed = (await readNote(config, '{Tasks}/Buy milk.md')).frontmatter;
   assert.equal(failed.google_id, undefined);
   assert.equal(failed.push_pending, undefined);
 
   const working = fakeTasks({}, { insert: () => ({ data: { id: 'g1', updated: '2026-02-01T08:00:00.000Z' } }) });
-  await pushVaultData(config, state, fakeCalendar().client, working.client);
+  await push(config, state, fakeCalendar().client, working.client);
   assert.equal((await readNote(config, '{Tasks}/Buy milk.md')).frontmatter.google_id, 'g1');
 });
 
@@ -141,7 +140,7 @@ test('when Google cannot be asked which list a folder means, nothing is pushed i
   const tasks = fakeTasks();
   (tasks.client.tasklists as any).list = async () => { throw apiError(503); };
 
-  await assert.doesNotReject(pushVaultData(config, emptyState(), fakeCalendar().client, tasks.client));
+  await assert.doesNotReject(push(config, emptyState(), fakeCalendar().client, tasks.client));
 
   assert.deepEqual(tasks.calls.tasks.insert, []);
   assert.equal((await readNote(config, '{Tasks}/Project A/Buy milk.md')).frontmatter.google_id, undefined);
@@ -153,7 +152,7 @@ test('deleting a note deletes the Google record, and a record already gone is no
   const tasks = fakeTasks({}, { delete: (p) => { if (p.task === 'gone-2') throw apiError(404); return {}; } });
   const cal = fakeCalendar();
 
-  await pushVaultData(config, state, cal.client, tasks.client);
+  await push(config, state, cal.client, tasks.client);
 
   assert.deepEqual(tasks.calls.tasks.delete.map((c) => c.task), ['gone-1', 'gone-2']);
   assert.deepEqual(cal.calls.delete.map((c) => c.eventId), ['gone-event']);
@@ -175,7 +174,7 @@ test('a new event note is created in Google and moved to its dated path', async 
   }, 'private body');
   const cal = fakeCalendar({ insert: () => ({ data: { id: 'abcdefgh1234', updated: '2026-02-01T08:00:00.000Z' } }) });
 
-  await pushVaultData(config, state, cal.client, fakeTasks().client);
+  await push(config, state, cal.client, fakeTasks().client);
 
   assert.deepEqual(cal.calls.insert[0], {
     calendarId: 'primary',
@@ -199,7 +198,7 @@ test('reminders: "default" means the calendar default', async () => {
   await writeNote(config, '{Calendar}/Dinner.md', { title: 'Dinner', start: `${D}T18:30:00+01:00`, end: `${D}T19:30:00+01:00`, reminders: ['default'] });
   const cal = fakeCalendar();
 
-  await pushVaultData(config, emptyState(), cal.client, fakeTasks().client);
+  await push(config, emptyState(), cal.client, fakeTasks().client);
 
   assert.deepEqual(cal.calls.insert[0].requestBody.reminders, { useDefault: true });
 });
@@ -210,7 +209,7 @@ test('a date written the way Obsidian\'s date property writes it (unquoted) is a
   await fs.writeFile(path.join(config.vaultResolved, '{Calendar}/Holiday.md'), `---\ntitle: Holiday\nstart: ${D}\nend: ${dateFromNow(201)}\n---\n`);
   const cal = fakeCalendar();
 
-  await pushVaultData(config, emptyState(), cal.client, fakeTasks().client);
+  await push(config, emptyState(), cal.client, fakeTasks().client);
 
   assert.deepEqual(cal.calls.insert[0].requestBody.start, { date: D });
   assert.deepEqual(cal.calls.insert[0].requestBody.end, { date: dateFromNow(201) });
@@ -223,7 +222,7 @@ test('rescheduling an event note patches Google and renames the note', async () 
   await writeNote(config, old, { ...fm, start: `${D}T20:00:00+01:00` });
   const cal = fakeCalendar();
 
-  await pushVaultData(config, { ...emptyState(), knownEventIds: { primary: ['abcdefgh1234'] } }, cal.client, fakeTasks().client);
+  await push(config, { ...emptyState(), knownEventIds: { primary: ['abcdefgh1234'] } }, cal.client, fakeTasks().client);
 
   assert.equal(cal.calls.patch[0].eventId, 'abcdefgh1234');
   assert.equal(cal.calls.patch[0].requestBody.start.dateTime, `${D}T20:00:00+01:00`);
@@ -235,7 +234,7 @@ test('a note under a README name is never pushed', async () => {
   await writeNote(config, '{Tasks}/README.md', { title: 'About this folder' });
   const tasks = fakeTasks();
 
-  await pushVaultData(config, emptyState(), fakeCalendar().client, tasks.client);
+  await push(config, emptyState(), fakeCalendar().client, tasks.client);
 
   assert.deepEqual(tasks.calls.tasks.insert, []);
   assert.equal(await exists(config, '{Tasks}/README.md'), true);
