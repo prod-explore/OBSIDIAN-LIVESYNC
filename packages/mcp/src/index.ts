@@ -1,35 +1,46 @@
-import { loadConfig } from './config.js';
-import { createApp } from './server.js';
 import * as fs from 'fs/promises';
+import { loadConfig, type Config } from './config.js';
+import { errorMessage } from './errors.js';
+import { logger } from './logger.js';
+import { createApp } from './server.js';
 
-const config = loadConfig();
+function start(config: Config): void {
+  const { app } = createApp(config);
 
-async function ensureVault(): Promise<void> {
+  const httpServer = app.listen(config.port, () => {
+    logger.info('Obsidian MCP server listening', {
+      port: config.port,
+      endpoints: ['POST /mcp/sse (streamable HTTP)', 'GET /mcp/sse (legacy SSE)', 'GET /mcp/health'],
+    });
+    void ensureVault(config);
+  });
+
+  function shutdown(signal: string): void {
+    logger.info('Shutting down', { signal });
+    httpServer.close(() => {
+      logger.info('HTTP server closed');
+      process.exit(0);
+    });
+    // Force exit if connections don't close within 10s.
+    setTimeout(() => process.exit(1), 10_000).unref();
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+async function ensureVault(config: Config): Promise<void> {
   try {
     await fs.access(config.vaultResolved);
-    console.log(`Vault path verified at ${config.vaultResolved}`);
+    logger.info('Vault found', { path: config.vaultResolved });
   } catch {
-    console.warn(`Vault path ${config.vaultResolved} does not exist yet. It will be created by headless Obsidian.`);
+    logger.warn('Vault path does not exist yet; headless Obsidian creates it', { path: config.vaultResolved });
   }
 }
 
-const { app } = createApp(config);
-
-const httpServer = app.listen(config.port, async () => {
-  console.log(`Obsidian Headless MCP Server running on port ${config.port}`);
-  console.log('Protocols: Streamable HTTP (POST /mcp/sse) + Legacy SSE (GET /mcp/sse)');
-  await ensureVault();
-});
-
-function shutdown(signal: string): void {
-  console.log(`Received ${signal}, shutting down gracefully...`);
-  httpServer.close(() => {
-    console.log('HTTP server closed.');
-    process.exit(0);
-  });
-  // Force exit if connections don't close within 10s.
-  setTimeout(() => process.exit(1), 10_000).unref();
+try {
+  start(loadConfig());
+} catch (err) {
+  logger.error('Cannot start', { error: errorMessage(err) });
+  process.exit(1);
 }
-
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));

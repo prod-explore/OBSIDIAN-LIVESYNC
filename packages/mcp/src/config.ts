@@ -34,14 +34,13 @@ export function resolveInstructions(env: NodeJS.ProcessEnv): string | undefined 
 }
 
 /**
- * Reads and validates environment configuration. Exits the process if a required
- * secret is missing — this server should never boot into an unauthenticated state.
+ * Reads and validates environment configuration. Throws if a required secret is
+ * missing — this server should never boot into an unauthenticated state.
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const apiKey = env.MCP_API_KEY;
   if (!apiKey) {
-    console.error('FATAL: MCP_API_KEY environment variable is not set. Refusing to start.');
-    process.exit(1);
+    throw new Error('MCP_API_KEY environment variable is not set. Refusing to start without authentication.');
   }
 
   const vaultPath = env.VAULT_PATH || '/vault';

@@ -4,6 +4,8 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import * as fs from 'fs/promises';
 import { Config } from './config.js';
+import { errorMessage } from './errors.js';
+import { logger } from './logger.js';
 import { registerAllTools } from './tools/index.js';
 import { tokensMatch } from './security.js';
 
@@ -30,11 +32,14 @@ function extractToken(req: express.Request): string | undefined {
 
 function requireAuth(config: Config, req: express.Request, res: express.Response): boolean {
   const token = extractToken(req);
+  // req.path has no query string, so the token (which may arrive as ?token=) is never part of what is logged.
   if (!token) {
+    logger.warn('Rejected a request: no token', { status: 401, method: req.method, path: req.path });
     res.status(401).json({ error: 'Unauthorized: Missing token' });
     return false;
   }
   if (!tokensMatch(token, config.apiKey)) {
+    logger.warn('Rejected a request: wrong token', { status: 403, method: req.method, path: req.path });
     res.status(403).json({ error: 'Forbidden: Invalid API Key' });
     return false;
   }
@@ -91,7 +96,7 @@ class SseSessionRegistry {
     const now = Date.now();
     for (const [id, session] of this.sessions) {
       if (now - session.createdAt > this.maxAgeMs) {
-        console.warn(`Sweeping stale SSE session ${id} (no clean close after ${this.maxAgeMs}ms)`);
+        logger.warn('Closing a stale SSE session (no clean close)', { session: id, afterMs: this.maxAgeMs });
         session.transport.close().catch(() => {});
         session.server.close().catch(() => {});
         this.sessions.delete(id);
@@ -134,8 +139,8 @@ export function createApp(config: Config): { app: express.Express; sseRegistry: 
 
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
-    } catch (err: any) {
-      console.error('Streamable HTTP error:', err);
+    } catch (err) {
+      logger.error('Streamable HTTP request failed', { error: errorMessage(err) });
       if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -144,16 +149,16 @@ export function createApp(config: Config): { app: express.Express; sseRegistry: 
   app.get('/mcp/sse', async (req, res) => {
     if (!requireAuth(config, req, res)) return;
 
-    console.log('New SSE connection established');
     const transport = new SSEServerTransport('/mcp/messages', res);
     const connectionServer = createMcpServer(config);
 
     await connectionServer.connect(transport);
     sseRegistry.add(transport.sessionId, { transport, server: connectionServer });
+    logger.info('SSE connection opened', { session: transport.sessionId, active: sseRegistry.size() });
 
     res.on('close', async () => {
-      console.log(`SSE connection closed: ${transport.sessionId}`);
       sseRegistry.delete(transport.sessionId);
+      logger.info('SSE connection closed', { session: transport.sessionId, active: sseRegistry.size() });
       try {
         await connectionServer.close();
       } catch {

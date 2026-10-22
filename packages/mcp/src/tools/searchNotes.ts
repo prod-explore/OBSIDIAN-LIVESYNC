@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { errorMessage } from '../errors.js';
 import { ok, fail, ToolContext } from './types.js';
 
 /**
@@ -51,8 +52,8 @@ export function registerSearchNotes(server: McpServer, { config }: ToolContext):
           ? `\n\n(Stopped at ${MAX_SEARCH_RESULTS} results — narrow the query to see the rest.)`
           : '';
         return ok(`Found ${results.length} notes matching "${query}":\n\n${results.join('\n')}${capped}`);
-      } catch (err: any) {
-        return fail(`Error searching notes: ${err.message}`);
+      } catch (err) {
+        return fail(`Error searching notes: ${errorMessage(err)}`);
       }
     }
   );

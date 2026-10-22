@@ -2,6 +2,7 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as fs from "fs/promises";
 import { resolveVaultPath } from "../security.js";
+import { errorMessage } from "../errors.js";
 import { ok, fail, ToolContext } from "./types.js";
 
 /**
@@ -78,8 +79,8 @@ export function registerEditNote(server: McpServer, { config }: ToolContext): vo
             : `Replaced lines ${start_line}–${end_line} in ${notePath} (${removedCount} → ${insertLines.length} line${insertLines.length === 1 ? "" : "s"})`;
 
         return ok(action);
-      } catch (err: any) {
-        return fail(`Error editing note: ${err.message}`);
+      } catch (err) {
+        return fail(`Error editing note: ${errorMessage(err)}`);
       }
     }
   );
