@@ -7,7 +7,17 @@
 
 A self-hosted Obsidian vault that **AI agents can read and edit through MCP**, and that **stays in sync with Google Calendar and Google Tasks**. Your notes live in your own CouchDB, on your own machine; the only thing exposed to the network is one authenticated endpoint.
 
-It is built around one assumption: **the client is a language model**. It can be wrong, and it can be prompt-injected by whatever it reads. So the tools are deliberately small, every path is checked, nothing is destroyed without a way back, and there is no shell.
+It is three parts that work together and can be used apart:
+
+| Part | What it gives you | Where it lives |
+|---|---|---|
+| **LiveSync** | Notes sync between your devices through your own CouchDB; a headless Obsidian turns the database into plain Markdown files | [`docker-compose.yml`](docker-compose.yml): CouchDB and Obsidian images, nothing to build |
+| **MCP server** | AI clients read and edit those files through seven small tools | [`packages/mcp`](packages/mcp) |
+| **Google sync** | Calendar events and Tasks as Markdown notes, in both directions | [`packages/gcal-sync`](packages/gcal-sync) |
+
+The repository is named after the first part, which is where it started. The MCP server and the sync are independent TypeScript packages in one npm workspace: each has its own Dockerfile and tests, and neither imports the other. They only meet in the vault folder.
+
+The MCP server is built around one assumption: **the client is a language model**. It can be wrong, and it can be prompt-injected by whatever it reads. So the tools are deliberately small, every path is checked, nothing is destroyed without a way back, and there is no shell.
 
 ## What is in the box
 
@@ -52,7 +62,9 @@ flowchart LR
 | Authentication | Bearer header or `?token=`, compared in constant time over SHA-256 hashes. The server refuses to start without `MCP_API_KEY`. OAuth discovery answers with a plain 404. |
 | Containers | The MCP server and the sync run as an unprivileged user, with a read-only root filesystem, all capabilities dropped and `no-new-privileges`. Required secrets are enforced by compose (`:?`). |
 | A vault that is suddenly empty | The sync would read that as "the user deleted everything" and delete it on Google, where Tasks has no undo. A **mass-deletion guard** refuses to delete most of a list in one cycle until you say so (`ALLOW_MASS_DELETE`). |
-| Crashes | Sync state is written atomically; a corrupt file is kept aside rather than overwritten; a stopped container lets a running cycle finish. |
+| Crashes | Sync state is written atomically; a corrupt file is kept aside rather than overwritten; a stopped container lets a running cycle finish; an insert interrupted halfway is recognised on the next cycle. |
+| A note the sync cannot understand | Front matter is read into typed notes. A `due` that is not a date, an unknown `status` or broken YAML skips that one note, says why in `status.json` and the log, and never looks like a deletion (nothing is deleted on Google in a cycle where part of the vault could not be read). |
+| Secrets in logs | One structured logger for both services. `?token=`, bearer tokens and any field named like a secret are masked; a rejected request is logged with its path and never its query string. A test pins that down. |
 | Dependencies | `npm audit` on runtime dependencies gates CI; images are built in CI; a secret scan runs on every push. |
 
 ## Quick start
@@ -71,7 +83,7 @@ Without Google Calendar and Tasks sync, start just the first three services:
 
 1. **Vault.** Headless Obsidian needs a one-time setup through its GUI: create the vault `vault-mcp` in `/vault`, install the LiveSync plugin, point it at CouchDB, fetch. Steps (with the SSH tunnel) in [`docs/operations.md`](docs/operations.md#setting-up-the-vault).
 2. **HTTPS.** [`deploy/nginx-obsidian.conf.example`](deploy/nginx-obsidian.conf.example) proxies `/mcp/` to the MCP server (no buffering, long timeouts, token kept out of the access log) and everything else to CouchDB for LiveSync.
-3. **Check.** `curl "https://obsidian.example.com/mcp/health?token=$MCP_API_KEY"` returns `{"status":"ok","vaultPath":…,"vaultExists":true,…}`.
+3. **Check.** `curl "https://obsidian.example.com/mcp/health?token=$MCP_API_KEY"` returns `{"status":"ok","vaultPath":…,"vaultExists":true,…}`, and `docker inspect --format '{{json .State.Health}}' obsidian-gcal-sync` says when the Google sync last succeeded.
 4. **Connect a client** (below).
 
 ### Connecting a client
@@ -113,7 +125,10 @@ On connect every client gets the tool list and one line pointing it at `_Systems
 - **What syncs.** Only frontmatter: `title`, `status`, `start`/`end` (events), `due` (tasks) and `description`. Reminders are mirrored into frontmatter too. **The Markdown body is never read from or written to Google**, in either direction — it is yours and your agent's space for context.
 - **Archiving.** Completed or cancelled tasks move to `04-Archive/{Tasks}/`; events move to `04-Archive/{Calendar}/…` once their whole month has passed, and come back if that reverses.
 - **Conflicts.** If a note was edited locally while Google changed too, the more recent change wins. When Google's wins, your version is appended to `_Systems/sync-conflicts.md`. A deletion on Google only marks the note cancelled locally; deleting the note deletes the record on Google (behind the mass-deletion guard above), and that deletion does not come back as a note.
-- **When something goes wrong.** An item that cannot be applied is logged and skipped without blocking the others, and the sync does not move its progress marker past it, so it is fetched again next cycle. An expired Google sync token (they do expire) restarts that calendar with a full sync. Task lists created in Google later are picked up on the next cycle.
+- **One item, one note.** If two notes carry the same `google_id` (a copy made in Obsidian, a LiveSync conflict copy, a move that was interrupted), the one changed last stays — a copy you edited here counts as the newest — and the other is moved to `_Systems/duplicates/` and written to the conflict log. It is moved, not deleted: its body may hold text that exists nowhere else.
+- **Cancelled notes expire.** A note marked cancelled (Google deleted the task or cancelled the event) stays as a record. When its body is empty and it has been cancelled for `CANCELLED_RETENTION_DAYS` days (30; `0` keeps them) it is removed. A note with anything written in its body never is.
+- **When something goes wrong.** An item that cannot be applied is logged and skipped without blocking the others, and the sync does not move its progress marker past it, so it is fetched again next cycle. An expired Google sync token (they do expire) restarts that calendar with a full sync. Task lists created in Google later are picked up on the next cycle. After every cycle the sync writes `status.json` (when it last succeeded, how many errors, which notes need fixing and why) and the container's health check reads it.
+- **Google Tasks has no "cancelled".** A task note marked `cancelled` in Obsidian stays a vault-side state: it is archived and expires like the others, but Google keeps the task.
 
 Setup: create a Google Cloud project, enable the Calendar and Tasks APIs and create an OAuth client (Desktop app). Put `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` into `.env`, then get a refresh token on a machine with a browser:
 
@@ -129,11 +144,15 @@ Known limits: the `{Tasks}`, `{Calendar}` and `04-Archive` folder names are fixe
 
 ```bash
 npm ci
-npm test --workspace packages/mcp            # strict type-check, build, 58 tests
-npm test --workspace packages/gcal-sync      # strict type-check, build, 71 tests
+npm test                         # strict type-check, build and every test of both packages
+npm run test:coverage --workspace packages/gcal-sync    # the same, with a coverage floor (c8)
+npm run lint                     # ESLint, type-aware: no `any`, no unawaited promises, no console.log
+npm run format:check             # Prettier
 ```
 
-CI runs both, plus `npm audit` on runtime dependencies, a Docker build of each image, a validation of the compose file and a secret scan. The tests include real symbolic links on disk, an HTTP-level suite for the server (auth, both transports, the list of tools), and the whole sync (ingest, push and full cycles) run against in-memory stand-ins for the Google APIs, including a simulated vault outage, expired tokens and failing writes.
+CI runs all of that, plus `npm audit` on runtime dependencies, a Docker build of each image, a validation of the compose file and a secret scan; Dependabot proposes dependency, base-image and Action updates. The tests include real symbolic links on disk, an HTTP-level suite for the server (auth, both transports, the list of tools, what its log does and does not contain), every tool against a real temporary vault, and the whole sync (ingest, push, full cycles and the status file) run against in-memory stand-ins for the Google APIs, including a simulated vault outage, expired tokens, failing writes, duplicate notes and notes with broken front matter.
+
+How the sync is put together: `sync/ingest.ts` pulls from Google, `sync/push/` (tasks, events, and the walk they share) pushes the vault's changes, `markdown/notes.ts` turns a parsed note into a typed one, and every step takes one `SyncContext` (config, state, clients, logger, the cycle's report). `cycle.ts` runs them in order and writes `status.json`.
 
 Conventions for changing or adding tools — especially what this project will never hand to an agent — are in [`AGENTS.md`](AGENTS.md). Running it day to day (backups, recovering notes, file ownership, logs) is in [`docs/operations.md`](docs/operations.md).
 

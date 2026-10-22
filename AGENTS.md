@@ -9,9 +9,13 @@ typical side project.
 
 1. `npm test` at the repository root (or `npm test --workspace packages/mcp`, `packages/gcal-sync` for one part) —
    it type-checks, builds and runs every test, and must pass before *and*
-   after your change.
+   after your change. So must `npm run lint` and `npm run format:check`.
 2. Both packages run TypeScript in `strict` mode. Don't loosen it to make an
-   error disappear; fix the type.
+   error disappear; fix the type. No `any` (the linter refuses it; use
+   `unknown` and narrow), and no `console.*`: log through `logger.ts`, which
+   masks tokens. `logger.ts` is the same file in both packages (CI diffs them).
+   In the sync, front matter is read with `readTaskNote` / `readEventNote`, never
+   used raw, and a note that cannot be understood is skipped and reported, not thrown on.
 3. If you're not sure whether a change is safe, prefer the smaller, more
    reversible option and say so in the PR/commit description.
 
