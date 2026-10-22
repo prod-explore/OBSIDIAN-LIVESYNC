@@ -36,6 +36,6 @@ export function registerDeleteNote(server: McpServer, { config }: ToolContext): 
       } catch (err) {
         return fail(`Error deleting note: ${errorMessage(err)}`);
       }
-    }
+    },
   );
 }

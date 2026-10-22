@@ -45,7 +45,10 @@ export function registerMoveNote(server: McpServer, { config }: ToolContext): vo
           throw new Error(`Source note does not exist: ${from}`);
         });
 
-        const destExists = await fs.access(toPath).then(() => true).catch(() => false);
+        const destExists = await fs
+          .access(toPath)
+          .then(() => true)
+          .catch(() => false);
         let trashedPath: string | undefined;
 
         if (destExists) {
@@ -57,7 +60,7 @@ export function registerMoveNote(server: McpServer, { config }: ToolContext): vo
 
         await fs.mkdir(path.dirname(toPath), { recursive: true });
         await fs.rename(fromPath, toPath);
-        
+
         // Update backlinks across the vault
         let updatedCount = 0;
         try {
@@ -66,14 +69,16 @@ export function registerMoveNote(server: McpServer, { config }: ToolContext): vo
           // The move itself succeeded; say so, and say that the links are not updated.
           logger.warn('Moved a note but could not update the links to it', { from, to, error: errorMessage(err) });
         }
-        
+
         if (trashedPath) {
-          return ok(`Moved ${from} → ${to} (overwritten file backed up to ${trashedPath}). Updated ${updatedCount} backlink(s).`);
+          return ok(
+            `Moved ${from} → ${to} (overwritten file backed up to ${trashedPath}). Updated ${updatedCount} backlink(s).`,
+          );
         }
         return ok(`Moved ${from} → ${to}. Updated ${updatedCount} backlink(s).`);
       } catch (err) {
         return fail(`Error moving note: ${errorMessage(err)}`);
       }
-    }
+    },
   );
 }

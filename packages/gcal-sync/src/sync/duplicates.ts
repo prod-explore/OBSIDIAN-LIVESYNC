@@ -81,7 +81,11 @@ function stamp(now: Date): string {
  * and written to the conflict log. The copy is moved, not deleted: its body may hold text that exists nowhere else.
  * Returns the notes that remain.
  */
-export async function setDuplicatesAside<N extends NoteFields>(ctx: SyncContext, kind: Kind, notes: ScannedNote<N>[]): Promise<ScannedNote<N>[]> {
+export async function setDuplicatesAside<N extends NoteFields>(
+  ctx: SyncContext,
+  kind: Kind,
+  notes: ScannedNote<N>[],
+): Promise<ScannedNote<N>[]> {
   const losers = new Set<ScannedNote<N>>();
 
   for (const [id, group] of groupById(notes)) {
@@ -95,7 +99,9 @@ export async function setDuplicatesAside<N extends NoteFields>(ctx: SyncContext,
         const targetPath = resolveVaultPath(ctx.config.vaultResolved, target);
         await fs.mkdir(path.dirname(targetPath), { recursive: true });
         await fs.rename(loser.fullPath, targetPath);
-        ctx.log.warn(`Two notes for one ${kind}: kept ${winner.relative}, moved ${loser.relative} to ${target}`, { googleId: id });
+        ctx.log.warn(`Two notes for one ${kind}: kept ${winner.relative}, moved ${loser.relative} to ${target}`, {
+          googleId: id,
+        });
         await logConflict(
           ctx,
           loser.relative,

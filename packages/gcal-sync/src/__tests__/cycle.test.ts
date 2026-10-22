@@ -5,7 +5,19 @@ import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { tasks_v1 } from 'googleapis';
-import { emptyState, exists, fakeCalendar, fakeTasks, ingest, listNotes, makeVault, push, readNote, removeVaults, writeNote } from './fakes.js';
+import {
+  emptyState,
+  exists,
+  fakeCalendar,
+  fakeTasks,
+  ingest,
+  listNotes,
+  makeVault,
+  push,
+  readNote,
+  removeVaults,
+  writeNote,
+} from './fakes.js';
 
 after(removeVaults);
 
@@ -16,33 +28,54 @@ function googleTasks(lists?: Array<{ id: string; title: string }>) {
   const store = new Map<string, StoredTask>();
   let clock = Date.parse('2026-02-01T08:00:00.000Z');
   const stamp = () => new Date((clock += 1000)).toISOString();
-  const fake = fakeTasks({ lists }, {
-    insert: (p) => {
-      const t: StoredTask = { id: `gtask${store.size + 1}xxxx`, ...(p.requestBody as tasks_v1.Schema$Task), tasklist: p.tasklist, updated: stamp() };
-      store.set(t.id as string, t);
-      return { data: t };
-    },
-    patch: (p) => {
-      const t: StoredTask = { ...store.get(p.task ?? ''), ...(p.requestBody as tasks_v1.Schema$Task), updated: stamp() };
-      store.set(t.id as string, t);
-      return { data: t };
-    },
-    delete: (p) => {
-      const t = store.get(p.task ?? '');
-      if (!t || t.deleted) throw Object.assign(new Error('gone'), { code: 404 });
-      store.set(p.task ?? '', { ...t, deleted: true, updated: stamp() });
-      return {};
-    },
-    list: (p) => ({
-      data: {
-        items: [...store.values()].filter((t) => t.tasklist === p.tasklist && (p.showDeleted || !t.deleted) && (!p.updatedMin || (t.updated ?? '') >= p.updatedMin)),
+  const fake = fakeTasks(
+    { lists },
+    {
+      insert: (p) => {
+        const t: StoredTask = {
+          id: `gtask${store.size + 1}xxxx`,
+          ...(p.requestBody as tasks_v1.Schema$Task),
+          tasklist: p.tasklist,
+          updated: stamp(),
+        };
+        store.set(t.id as string, t);
+        return { data: t };
       },
-    }),
-  });
+      patch: (p) => {
+        const t: StoredTask = {
+          ...store.get(p.task ?? ''),
+          ...(p.requestBody as tasks_v1.Schema$Task),
+          updated: stamp(),
+        };
+        store.set(t.id as string, t);
+        return { data: t };
+      },
+      delete: (p) => {
+        const t = store.get(p.task ?? '');
+        if (!t || t.deleted) throw Object.assign(new Error('gone'), { code: 404 });
+        store.set(p.task ?? '', { ...t, deleted: true, updated: stamp() });
+        return {};
+      },
+      list: (p) => ({
+        data: {
+          items: [...store.values()].filter(
+            (t) =>
+              t.tasklist === p.tasklist &&
+              (p.showDeleted || !t.deleted) &&
+              (!p.updatedMin || (t.updated ?? '') >= p.updatedMin),
+          ),
+        },
+      }),
+    },
+  );
   return { ...fake, store, stamp };
 }
 
-async function cycle(config: Awaited<ReturnType<typeof makeVault>>, state: ReturnType<typeof emptyState>, g: ReturnType<typeof googleTasks>) {
+async function cycle(
+  config: Awaited<ReturnType<typeof makeVault>>,
+  state: ReturnType<typeof emptyState>,
+  g: ReturnType<typeof googleTasks>,
+) {
   const cal = fakeCalendar();
   await ingest(config, state, cal.client, g.client);
   await push(config, state, cal.client, g.client);
@@ -80,7 +113,11 @@ test('deleting a note deletes the task in Google once, and the deletion does not
   await cycle(config, state, g);
 
   assert.equal(g.calls.tasks.delete.length, 1);
-  assert.deepEqual(await listNotes(config), [], 'Google reports the deleted task on the next pull; that must not recreate a note');
+  assert.deepEqual(
+    await listNotes(config),
+    [],
+    'Google reports the deleted task on the next pull; that must not recreate a note',
+  );
   assert.deepEqual(state.knownTaskIds.L1, []);
 });
 
@@ -106,7 +143,10 @@ test('completing the task in Google archives the note and nothing is pushed back
 test('ticking a task off in a list subfolder archives it under that list: the task is neither deleted nor re-created', async () => {
   const config = await makeVault();
   const state = emptyState();
-  const g = googleTasks([{ id: 'L1', title: 'My Tasks' }, { id: 'L2', title: 'Project A' }]);
+  const g = googleTasks([
+    { id: 'L1', title: 'My Tasks' },
+    { id: 'L2', title: 'Project A' },
+  ]);
   await writeNote(config, '{Tasks}/Project A/Plan.md', { title: 'Plan', status: 'needsAction' });
   await cycle(config, state, g);
   await cycle(config, state, g);
@@ -128,7 +168,12 @@ test('ticking a task off in a list subfolder archives it under that list: the ta
 
   // and back: re-opened in the vault, it returns to its list folder
   const done = await readNote(config, '04-Archive/{Tasks}/Project A/Plan.md');
-  await writeNote(config, '04-Archive/{Tasks}/Project A/Plan.md', { ...done.frontmatter, status: 'needsAction' }, done.body);
+  await writeNote(
+    config,
+    '04-Archive/{Tasks}/Project A/Plan.md',
+    { ...done.frontmatter, status: 'needsAction' },
+    done.body,
+  );
   await cycle(config, state, g);
   await cycle(config, state, g);
   await cycle(config, state, g);

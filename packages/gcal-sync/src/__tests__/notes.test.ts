@@ -62,7 +62,11 @@ test('event dates: a Date at midnight UTC is an all-day date, a date-time stays 
   assert.equal(timed.note.start, '2031-05-04T18:30:00+01:00', 'as the sync writes it (quoted), the offset is kept');
   assert.deepEqual(timed.problems, []);
   const bare = readEventNote(read('start: 2031-05-04T18:30:00+01:00'));
-  assert.equal(bare.note.start, '2031-05-04T17:30:00.000Z', 'typed by hand without quotes, YAML has already turned it into the same instant in UTC');
+  assert.equal(
+    bare.note.start,
+    '2031-05-04T17:30:00.000Z',
+    'typed by hand without quotes, YAML has already turned it into the same instant in UTC',
+  );
 });
 
 test('an event with an impossible date is a problem', () => {

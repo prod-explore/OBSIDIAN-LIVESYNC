@@ -53,14 +53,19 @@ export async function readNote(config: Config, rel: string) {
 }
 
 export async function exists(config: Config, rel: string): Promise<boolean> {
-  return fs.access(path.join(config.vaultResolved, rel)).then(() => true, () => false);
+  return fs.access(path.join(config.vaultResolved, rel)).then(
+    () => true,
+    () => false,
+  );
 }
 
 /** Every .md file under `rel` (vault-relative, forward slashes), sorted. */
 export async function listNotes(config: Config, rel = ''): Promise<string[]> {
   const out: string[] = [];
   async function walk(dir: string) {
-    for (const entry of await fs.readdir(path.join(config.vaultResolved, dir), { withFileTypes: true }).catch(() => [])) {
+    for (const entry of await fs
+      .readdir(path.join(config.vaultResolved, dir), { withFileTypes: true })
+      .catch(() => [])) {
       const next = dir ? `${dir}/${entry.name}` : entry.name;
       if (entry.isDirectory()) await walk(next);
       else if (entry.name.endsWith('.md')) out.push(next);
@@ -73,7 +78,10 @@ export async function listNotes(config: Config, rel = ''): Promise<string[]> {
 // ── sync context ────────────────────────────────────────────────────────────
 
 /** A log line the test run captured. */
-export interface Captured { level: string; line: string }
+export interface Captured {
+  level: string;
+  line: string;
+}
 
 /** A context over fake clients. Its logger is silent unless `lines` is given to collect what is logged. */
 export function syncContext(
@@ -84,19 +92,33 @@ export function syncContext(
   options: { lines?: Captured[]; now?: () => Date } = {},
 ): SyncContext {
   const { lines } = options;
-  const log = createLogger({ level: lines ? 'debug' : 'silent', format: 'text', write: (line, level) => lines?.push({ level, line }) });
+  const log = createLogger({
+    level: lines ? 'debug' : 'silent',
+    format: 'text',
+    write: (line, level) => lines?.push({ level, line }),
+  });
   return createContext({ config, state, calendar, tasks, log, now: options.now });
 }
 
 /** One ingest pass; returns the context so a test can look at `report`. */
-export async function ingest(config: Config, state: SyncState, calendar: calendar_v3.Calendar, tasks: tasks_v1.Tasks): Promise<SyncContext> {
+export async function ingest(
+  config: Config,
+  state: SyncState,
+  calendar: calendar_v3.Calendar,
+  tasks: tasks_v1.Tasks,
+): Promise<SyncContext> {
   const ctx = syncContext(config, state, calendar, tasks);
   await ingestGoogleData(ctx);
   return ctx;
 }
 
 /** One push pass; returns the context so a test can look at `report`. */
-export async function push(config: Config, state: SyncState, calendar: calendar_v3.Calendar, tasks: tasks_v1.Tasks): Promise<SyncContext> {
+export async function push(
+  config: Config,
+  state: SyncState,
+  calendar: calendar_v3.Calendar,
+  tasks: tasks_v1.Tasks,
+): Promise<SyncContext> {
   const ctx = syncContext(config, state, calendar, tasks);
   await pushVaultData(ctx);
   return ctx;
@@ -167,7 +189,10 @@ export function fakeCalendar(handlers: Handlers<'list' | 'insert' | 'patch' | 'd
   return { client: { events: fns } as unknown as calendar_v3.Calendar, calls };
 }
 
-export interface TaskListSpec { id: string; title: string }
+export interface TaskListSpec {
+  id: string;
+  title: string;
+}
 
 export function fakeTasks(
   opts: { lists?: TaskListSpec[]; defaultId?: string; listApi?: Handlers<'list' | 'get' | 'insert'> } = {},
@@ -175,18 +200,22 @@ export function fakeTasks(
 ) {
   const lists = opts.lists ?? [{ id: 'L1', title: 'My Tasks' }];
   const defaultId = opts.defaultId ?? lists[0]?.id;
-  const listApi = recorder(['list', 'get', 'insert'] as const, {
-    insert: (p) => {
-      const created = { id: nextId('list'), title: String(p.requestBody?.title) };
-      lists.push(created);
-      return { data: created };
+  const listApi = recorder(
+    ['list', 'get', 'insert'] as const,
+    {
+      insert: (p) => {
+        const created = { id: nextId('list'), title: String(p.requestBody?.title) };
+        lists.push(created);
+        return { data: created };
+      },
+      ...opts.listApi,
     },
-    ...opts.listApi,
-  }, {
-    list: () => ({ data: { items: lists } }),
-    get: () => ({ data: { id: defaultId } }),
-    insert: () => ({ data: {} }),
-  });
+    {
+      list: () => ({ data: { items: lists } }),
+      get: () => ({ data: { id: defaultId } }),
+      insert: () => ({ data: {} }),
+    },
+  );
   const taskApi = recorder(['list', 'insert', 'patch', 'delete'] as const, handlers, {
     list: () => ({ data: { items: [] } }),
     insert: () => ({ data: { id: nextId('task'), updated: new Date().toISOString() } }),

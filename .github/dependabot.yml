@@ -1,0 +1,35 @@
+version: 2
+updates:
+  # Dependencies of both packages (one lockfile at the root).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      dev-tooling:
+        dependency-type: development
+        update-types: [minor, patch]
+      runtime:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  # Base images of the two Dockerfiles.
+  - package-ecosystem: docker
+    directories:
+      - /packages/mcp
+      - /packages/gcal-sync
+    schedule:
+      interval: weekly
+
+  # Image tags in docker-compose.yml (only useful while they are pinned, see the comments there).
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

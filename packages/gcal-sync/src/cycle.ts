@@ -71,7 +71,7 @@ export async function runCycle(deps: CycleDeps): Promise<CycleResult> {
     lastSuccessAt: ok ? finished.toISOString() : previous?.lastSuccessAt,
     lastDurationMs: durationMs,
     errors,
-    lastError: fatal,
+    lastError: fatal ?? ctx?.report.firstError,
     problems: Object.fromEntries(ctx?.report.problems ?? []),
     removedCancelled,
     pollIntervalMinutes: deps.config.pollIntervalMinutes,

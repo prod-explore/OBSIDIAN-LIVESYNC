@@ -60,7 +60,11 @@ export const staleAfterMinutes = (pollIntervalMinutes: number): number => pollIn
 export function evaluateHealth(status: SyncStatus | undefined, now: Date): Health {
   if (!status) return { healthy: false, reason: 'no sync cycle has finished yet' };
 
-  const detail = status.lastError ? ` Last error: ${status.lastError}` : status.errors > 0 ? ` The last cycle had ${status.errors} error(s); see the logs.` : '';
+  const detail = status.lastError
+    ? ` Last error: ${status.lastError}`
+    : status.errors > 0
+      ? ` The last cycle had ${status.errors} error(s); see the logs.`
+      : '';
   if (!status.lastSuccessAt) return { healthy: false, reason: `no sync cycle has succeeded yet.${detail}` };
 
   const ageMinutes = Math.floor((now.getTime() - new Date(status.lastSuccessAt).getTime()) / MINUTE_MS);

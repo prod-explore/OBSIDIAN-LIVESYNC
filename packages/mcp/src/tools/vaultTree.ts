@@ -29,10 +29,7 @@ export function registerVaultTree(server: McpServer, { config }: ToolContext): v
       'Use depth=-1 for a full recursive listing (best combined with a scoped path). ' +
       'IMPORTANT: call on first vault contact per session and after >5 min idle to avoid stale paths.',
     {
-      path: z
-        .string()
-        .default('')
-        .describe('Folder path relative to vault root. Empty = vault root.'),
+      path: z.string().default('').describe('Folder path relative to vault root. Empty = vault root.'),
       depth: z
         .number()
         .int()
@@ -41,7 +38,7 @@ export function registerVaultTree(server: McpServer, { config }: ToolContext): v
           'How many levels to recurse. ' +
             '1 (default) = top folders + their immediate children. ' +
             '2 = one level deeper. ' +
-            '-1 = unlimited (use with a scoped path to avoid large output).'
+            '-1 = unlimited (use with a scoped path to avoid large output).',
         ),
     },
     async ({ path: inputPath, depth }) => {
@@ -58,7 +55,7 @@ export function registerVaultTree(server: McpServer, { config }: ToolContext): v
         if (isFileMissing(err)) return fail(`Path not found: ${inputPath}`);
         return fail(`Error building tree: ${errorMessage(err)}`);
       }
-    }
+    },
   );
 }
 
@@ -84,13 +81,13 @@ async function walk(
   lines: string[],
   maxDepth: number,
   curDepth: number,
-  prefix: string
+  prefix: string,
 ): Promise<void> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
   // Skip dotfiles/dotdirs; sort directories before files, then alphabetically.
   const visible = entries
-    .filter(e => !e.name.startsWith('.') && (e.isDirectory() || e.isFile()))
+    .filter((e) => !e.name.startsWith('.') && (e.isDirectory() || e.isFile()))
     .sort((a, b) => {
       const aDir = a.isDirectory() ? 0 : 1;
       const bDir = b.isDirectory() ? 0 : 1;
@@ -99,21 +96,15 @@ async function walk(
     });
 
   for (let i = 0; i < visible.length; i++) {
-    const entry    = visible[i];
-    const isLast   = i === visible.length - 1;
-    const branch   = isLast ? '└── ' : '├── ';
+    const entry = visible[i];
+    const isLast = i === visible.length - 1;
+    const branch = isLast ? '└── ' : '├── ';
     const childPfx = isLast ? '    ' : '│   ';
 
     if (entry.isDirectory()) {
       lines.push(`${prefix}${branch}${entry.name}/`);
       if (maxDepth === -1 || curDepth < maxDepth) {
-        await walk(
-          path.join(dirPath, entry.name),
-          lines,
-          maxDepth,
-          curDepth + 1,
-          prefix + childPfx
-        );
+        await walk(path.join(dirPath, entry.name), lines, maxDepth, curDepth + 1, prefix + childPfx);
       }
     } else {
       lines.push(`${prefix}${branch}${entry.name}`);

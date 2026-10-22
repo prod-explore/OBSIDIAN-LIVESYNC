@@ -17,7 +17,7 @@ import type { SyncContext } from './context.js';
 export async function renameAndRefactorLinks(
   ctx: SyncContext,
   oldRelativePath: string,
-  newRelativePath: string
+  newRelativePath: string,
 ): Promise<void> {
   if (oldRelativePath === newRelativePath) return;
 

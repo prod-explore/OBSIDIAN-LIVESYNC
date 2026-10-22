@@ -25,3 +25,6 @@ vault/
 *.log.*
 
 
+
+# Test coverage reports
+coverage/

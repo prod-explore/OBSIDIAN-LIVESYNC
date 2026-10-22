@@ -5,11 +5,11 @@ import { logger as defaultLogger, type Logger } from '../logger.js';
 
 export interface SyncState {
   calendarTokens: Record<string, string>;
-  tasksTokens:    Record<string, string>;
+  tasksTokens: Record<string, string>;
   // Manifest of google_ids known to exist per tasklist/calendar.
   // Used by push to detect file deletions (ids that vanished from the vault).
-  knownTaskIds:   Record<string, string[]>; // tasklistId → [googleId, ...]
-  knownEventIds:  Record<string, string[]>; // calendarId → [googleId, ...]
+  knownTaskIds: Record<string, string[]>; // tasklistId → [googleId, ...]
+  knownEventIds: Record<string, string[]>; // calendarId → [googleId, ...]
 }
 
 export function emptyState(): SyncState {
@@ -24,7 +24,10 @@ export function dataDir(env: NodeJS.ProcessEnv = process.env): string {
 export class StateManager {
   private stateFile: string;
 
-  constructor(private readonly log: Logger = defaultLogger, dir: string = dataDir()) {
+  constructor(
+    private readonly log: Logger = defaultLogger,
+    dir: string = dataDir(),
+  ) {
     this.stateFile = path.join(dir, 'sync-state.json');
   }
 
@@ -48,16 +51,19 @@ export class StateManager {
     } catch {
       const aside = `${this.stateFile}.corrupt-${Date.now()}`;
       await fs.rename(this.stateFile, aside).catch(() => {});
-      this.log.error('State file is not valid JSON; moved aside and starting from an empty state (full re-sync)', { file: this.stateFile, movedTo: aside });
+      this.log.error('State file is not valid JSON; moved aside and starting from an empty state (full re-sync)', {
+        file: this.stateFile,
+        movedTo: aside,
+      });
       return emptyState();
     }
 
     // Zero-fill new fields — existing sync-state.json files won't break.
     return {
       calendarTokens: raw.calendarTokens ?? {},
-      tasksTokens:    raw.tasksTokens    ?? {},
-      knownTaskIds:   raw.knownTaskIds   ?? {},
-      knownEventIds:  raw.knownEventIds  ?? {},
+      tasksTokens: raw.tasksTokens ?? {},
+      knownTaskIds: raw.knownTaskIds ?? {},
+      knownEventIds: raw.knownEventIds ?? {},
     };
   }
 

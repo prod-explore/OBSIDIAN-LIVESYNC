@@ -54,7 +54,7 @@ test('health accepts the token as a Bearer header or as ?token=', async () => {
     await fetch(`${base}/mcp/health?token=${KEY}`),
   ]) {
     assert.equal(res.status, 200);
-    const body = await res.json() as { status: string; vaultExists: boolean };
+    const body = (await res.json()) as { status: string; vaultExists: boolean };
     assert.equal(body.status, 'ok');
     assert.equal(body.vaultExists, true);
   }
@@ -66,14 +66,36 @@ test('OAuth discovery answers with a plain 404, not a 401', async () => {
 });
 
 test('streamable HTTP and the legacy SSE entry point both refuse an unauthenticated client', async () => {
-  const post = await fetch(`${base}/mcp/sse`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  const post = await fetch(`${base}/mcp/sse`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
   assert.equal(post.status, 401);
   assert.equal((await fetch(`${base}/mcp/sse`)).status, 401);
 });
 
 test('posting a message for an unknown SSE session is a 404, a missing id a 400', async () => {
-  assert.equal((await fetch(`${base}/mcp/messages?sessionId=nope`, { method: 'POST', body: '{}', headers: { 'content-type': 'application/json' } })).status, 404);
-  assert.equal((await fetch(`${base}/mcp/messages`, { method: 'POST', body: '{}', headers: { 'content-type': 'application/json' } })).status, 400);
+  assert.equal(
+    (
+      await fetch(`${base}/mcp/messages?sessionId=nope`, {
+        method: 'POST',
+        body: '{}',
+        headers: { 'content-type': 'application/json' },
+      })
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await fetch(`${base}/mcp/messages`, {
+        method: 'POST',
+        body: '{}',
+        headers: { 'content-type': 'application/json' },
+      })
+    ).status,
+    400,
+  );
 });
 
 test('an authenticated MCP client can list the tools the README documents', async () => {
@@ -90,24 +112,39 @@ test('an authenticated MCP client can list the tools the README documents', asyn
   const text = await res.text();
   const payload = text.split('\n').find((l) => l.startsWith('data:'));
   const message = JSON.parse(payload ? payload.slice(5) : text) as { result: { tools: { name: string }[] } };
-  assert.deepEqual(
-    message.result.tools.map((t) => t.name).sort(),
-    ['delete_note', 'edit_note', 'get_path', 'get_vault_tree', 'move_note', 'search_notes', 'write_note']
-  );
+  assert.deepEqual(message.result.tools.map((t) => t.name).sort(), [
+    'delete_note',
+    'edit_note',
+    'get_path',
+    'get_vault_tree',
+    'move_note',
+    'search_notes',
+    'write_note',
+  ]);
 });
 
 test('clients are pointed at the vault\'s own rules file by default; MCP_INSTRUCTIONS replaces that, "none" removes it', () => {
   assert.equal(resolveInstructions({}), DEFAULT_INSTRUCTIONS);
-  assert.equal(resolveInstructions({ MCP_INSTRUCTIONS: '' }), DEFAULT_INSTRUCTIONS, 'empty = unset, so compose can pass it through');
+  assert.equal(
+    resolveInstructions({ MCP_INSTRUCTIONS: '' }),
+    DEFAULT_INSTRUCTIONS,
+    'empty = unset, so compose can pass it through',
+  );
   assert.ok(DEFAULT_INSTRUCTIONS.includes('_Systems/AGENTS.md'));
-  assert.equal(resolveInstructions({ MCP_INSTRUCTIONS: ' Read the rules in Meta/Rules.md first. ' }), 'Read the rules in Meta/Rules.md first.');
+  assert.equal(
+    resolveInstructions({ MCP_INSTRUCTIONS: ' Read the rules in Meta/Rules.md first. ' }),
+    'Read the rules in Meta/Rules.md first.',
+  );
   assert.equal(resolveInstructions({ MCP_INSTRUCTIONS: 'none' }), undefined);
 });
 
 test('a rejected request is logged with its path, and the token it carried never is', async () => {
   const written: string[] = [];
   const original = process.stderr.write.bind(process.stderr);
-  process.stderr.write = ((chunk: string | Uint8Array) => (written.push(String(chunk)), true)) as typeof process.stderr.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => (
+    written.push(String(chunk)),
+    true
+  )) as typeof process.stderr.write;
   try {
     await fetch(`${base}/mcp/health?token=guess-1234`);
     await fetch(`${base}/mcp/health`);

@@ -60,7 +60,8 @@ function plain(value: unknown): unknown {
 function formatLine(format: LogFormat, level: string, message: string, fields: Fields): string {
   const time = new Date().toISOString();
   const cleaned: Fields = {};
-  for (const [key, value] of Object.entries(fields)) cleaned[key] = SECRET_FIELD.test(key) ? '[redacted]' : plain(value);
+  for (const [key, value] of Object.entries(fields))
+    cleaned[key] = SECRET_FIELD.test(key) ? '[redacted]' : plain(value);
 
   if (format === 'json') return redact(JSON.stringify({ time, level, msg: message, ...cleaned }));
 
@@ -68,7 +69,9 @@ function formatLine(format: LogFormat, level: string, message: string, fields: F
   const extras = Object.entries(rest)
     .map(([key, value]) => `${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`)
     .join(' ');
-  return redact(`${time} ${level.toUpperCase().padEnd(5)} ${scope ? `[${String(scope)}] ` : ''}${message}${extras ? ` ${extras}` : ''}`);
+  return redact(
+    `${time} ${level.toUpperCase().padEnd(5)} ${scope ? `[${String(scope)}] ` : ''}${message}${extras ? ` ${extras}` : ''}`,
+  );
 }
 
 export function createLogger(options: LoggerOptions = {}): Logger {
@@ -103,7 +106,8 @@ export function createLogger(options: LoggerOptions = {}): Logger {
 
 /** The process-wide logger, configured from the environment. */
 export function loggerFromEnv(env: NodeJS.ProcessEnv = process.env): Logger {
-  const format: LogFormat = env.LOG_FORMAT === 'text' || env.LOG_FORMAT === 'json' ? env.LOG_FORMAT : process.stdout.isTTY ? 'text' : 'json';
+  const format: LogFormat =
+    env.LOG_FORMAT === 'text' || env.LOG_FORMAT === 'json' ? env.LOG_FORMAT : process.stdout.isTTY ? 'text' : 'json';
   return createLogger({ level: levelFrom(env.LOG_LEVEL), format });
 }
 

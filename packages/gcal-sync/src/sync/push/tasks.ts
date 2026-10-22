@@ -45,9 +45,16 @@ async function pushTaskNote(ctx: SyncContext, entry: ScannedNote<TaskNote>, isNe
     // The note was moved to another list's folder in Obsidian: the task is deleted from the old list and created in the new one.
     try {
       await tasks.tasks.delete({ tasklist: note.tasklist_id, task: note.google_id });
-      ctx.log.info('Task moved to another list; deleted it from the old one', { googleId: note.google_id, from: note.tasklist_id, to: tasklistId });
+      ctx.log.info('Task moved to another list; deleted it from the old one', {
+        googleId: note.google_id,
+        from: note.tasklist_id,
+        to: tasklistId,
+      });
     } catch (err) {
-      ctx.log.warn('Task moved to another list, but deleting it from the old one failed; continuing', { googleId: note.google_id, error: errorMessage(err) });
+      ctx.log.warn('Task moved to another list, but deleting it from the old one failed; continuing', {
+        googleId: note.google_id,
+        error: errorMessage(err),
+      });
     }
     delete note.google_id;
     create = true;

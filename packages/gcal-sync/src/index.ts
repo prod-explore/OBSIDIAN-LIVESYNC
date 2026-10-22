@@ -41,7 +41,9 @@ function bootstrap(): void {
 
   const runSyncCycle = (): Promise<unknown> => {
     if (isSyncing || shuttingDown) {
-      log.info(shuttingDown ? 'Skipping a cycle: shutting down' : 'Skipping a cycle: the previous one is still running');
+      log.info(
+        shuttingDown ? 'Skipping a cycle: shutting down' : 'Skipping a cycle: the previous one is still running',
+      );
       return Promise.resolve();
     }
     isSyncing = true;

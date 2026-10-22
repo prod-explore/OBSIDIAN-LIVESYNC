@@ -45,7 +45,11 @@ async function writeNoteFile(fullPath: string, frontmatter: RawFrontmatter, body
 }
 
 const verbOf = (from: string, to: string) =>
-  !isArchivedPath(from) && isArchivedPath(to) ? 'Archived' : isArchivedPath(from) && !isArchivedPath(to) ? 'Unarchived' : 'Relocated';
+  !isArchivedPath(from) && isArchivedPath(to)
+    ? 'Archived'
+    : isArchivedPath(from) && !isArchivedPath(to)
+      ? 'Unarchived'
+      : 'Relocated';
 
 // ---------------------------------------------------------------------------
 // Main ingest function
@@ -83,7 +87,9 @@ async function ingestCalendars(ctx: SyncContext) {
           syncToken,
           pageToken,
           singleEvents: true,
-          ...(!syncToken ? { timeMin: new Date(ctx.now().getTime() - FIRST_SYNC_LOOKBACK_DAYS * DAY_MS).toISOString() } : {}),
+          ...(!syncToken
+            ? { timeMin: new Date(ctx.now().getTime() - FIRST_SYNC_LOOKBACK_DAYS * DAY_MS).toISOString() }
+            : {}),
         });
         data = response.data;
       } catch (err) {
@@ -384,7 +390,8 @@ async function ingestTask(ctx: SyncContext, list: TaskList, task: tasks_v1.Schem
       ctx.log.info(`${isArchived ? 'Archived' : 'Unarchived'} task`, { from: existingFile, to: targetRelative });
     } catch (err) {
       // ENOENT: already gone (double-cycle race), the new file is correct. Anything else is worth a line.
-      if (!isFileMissing(err)) ctx.log.warn(`Could not remove the old task file ${existingFile}`, { error: errorMessage(err) });
+      if (!isFileMissing(err))
+        ctx.log.warn(`Could not remove the old task file ${existingFile}`, { error: errorMessage(err) });
     }
   }
 

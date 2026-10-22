@@ -69,7 +69,10 @@ class SseSessionRegistry {
   private sessions = new Map<string, SseSession>();
   private sweepHandle: NodeJS.Timeout | null = null;
 
-  constructor(private maxAgeMs: number, private sweepIntervalMs: number) {}
+  constructor(
+    private maxAgeMs: number,
+    private sweepIntervalMs: number,
+  ) {}
 
   add(id: string, session: Omit<SseSession, 'createdAt'>): void {
     this.sessions.set(id, { ...session, createdAt: Date.now() });
@@ -113,7 +116,10 @@ class SseSessionRegistry {
  * Express 4 ignores the promise an async handler returns, so a rejection would be an unhandled rejection, and
  * Node ends the process on those. Every async route goes through here: the failure is logged and answered with a 500.
  */
-function handle(route: string, fn: (req: express.Request, res: express.Response) => Promise<void>): express.RequestHandler {
+function handle(
+  route: string,
+  fn: (req: express.Request, res: express.Response) => Promise<void>,
+): express.RequestHandler {
   return (req, res) => {
     fn(req, res).catch((err: unknown) => {
       logger.error('Request failed', { route, error: errorMessage(err) });
@@ -138,76 +144,88 @@ export function createApp(config: Config): { app: express.Express; sseRegistry: 
 
   // ── Streamable HTTP transport (Antigravity, Cursor, etc.) — stateless ──
   // Each POST spins up a fresh server+transport, handles the one request, tears down.
-  app.post('/mcp/sse', handle('POST /mcp/sse', async (req, res) => {
-    if (!requireAuth(config, req, res)) return;
+  app.post(
+    '/mcp/sse',
+    handle('POST /mcp/sse', async (req, res) => {
+      if (!requireAuth(config, req, res)) return;
 
-    try {
-      const server = createMcpServer(config);
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      try {
+        const server = createMcpServer(config);
+        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
-      res.on('close', () => {
-        transport.close().catch(() => {});
-        server.close().catch(() => {});
-      });
+        res.on('close', () => {
+          transport.close().catch(() => {});
+          server.close().catch(() => {});
+        });
 
-      await server.connect(transport);
-      await transport.handleRequest(req, res, req.body);
-    } catch (err) {
-      logger.error('Streamable HTTP request failed', { error: errorMessage(err) });
-      if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
-    }
-  }));
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+      } catch (err) {
+        logger.error('Streamable HTTP request failed', { error: errorMessage(err) });
+        if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
+      }
+    }),
+  );
 
   // ── Legacy SSE transport (Claude Desktop) ──
-  app.get('/mcp/sse', handle('GET /mcp/sse', async (req, res) => {
-    if (!requireAuth(config, req, res)) return;
+  app.get(
+    '/mcp/sse',
+    handle('GET /mcp/sse', async (req, res) => {
+      if (!requireAuth(config, req, res)) return;
 
-    const transport = new SSEServerTransport('/mcp/messages', res);
-    const connectionServer = createMcpServer(config);
+      const transport = new SSEServerTransport('/mcp/messages', res);
+      const connectionServer = createMcpServer(config);
 
-    await connectionServer.connect(transport);
-    sseRegistry.add(transport.sessionId, { transport, server: connectionServer });
-    logger.info('SSE connection opened', { session: transport.sessionId, active: sseRegistry.size() });
+      await connectionServer.connect(transport);
+      sseRegistry.add(transport.sessionId, { transport, server: connectionServer });
+      logger.info('SSE connection opened', { session: transport.sessionId, active: sseRegistry.size() });
 
-    res.on('close', () => {
-      sseRegistry.delete(transport.sessionId);
-      logger.info('SSE connection closed', { session: transport.sessionId, active: sseRegistry.size() });
-      connectionServer.close().catch(() => {
-        /* already closing */
+      res.on('close', () => {
+        sseRegistry.delete(transport.sessionId);
+        logger.info('SSE connection closed', { session: transport.sessionId, active: sseRegistry.size() });
+        connectionServer.close().catch(() => {
+          /* already closing */
+        });
       });
-    });
-  }));
+    }),
+  );
 
-  app.post('/mcp/messages', handle('POST /mcp/messages', async (req, res) => {
-    const sessionId = req.query.sessionId;
-    if (typeof sessionId !== 'string') {
-      res.status(400).send('Missing or invalid sessionId');
-      return;
-    }
+  app.post(
+    '/mcp/messages',
+    handle('POST /mcp/messages', async (req, res) => {
+      const sessionId = req.query.sessionId;
+      if (typeof sessionId !== 'string') {
+        res.status(400).send('Missing or invalid sessionId');
+        return;
+      }
 
-    const session = sseRegistry.get(sessionId);
-    if (!session) {
-      res.status(404).send('Session not found');
-      return;
-    }
+      const session = sseRegistry.get(sessionId);
+      if (!session) {
+        res.status(404).send('Session not found');
+        return;
+      }
 
-    await session.transport.handlePostMessage(req, res, req.body);
-  }));
+      await session.transport.handlePostMessage(req, res, req.body);
+    }),
+  );
 
   // ── Health check ──
-  app.get('/mcp/health', handle('GET /mcp/health', async (req, res) => {
-    if (!requireAuth(config, req, res)) return;
-    const vaultExists = await fs
-      .access(config.vaultResolved)
-      .then(() => true)
-      .catch(() => false);
-    res.json({
-      status: 'ok',
-      vaultPath: config.vaultResolved,
-      vaultExists,
-      activeSseSessions: sseRegistry.size(),
-    });
-  }));
+  app.get(
+    '/mcp/health',
+    handle('GET /mcp/health', async (req, res) => {
+      if (!requireAuth(config, req, res)) return;
+      const vaultExists = await fs
+        .access(config.vaultResolved)
+        .then(() => true)
+        .catch(() => false);
+      res.json({
+        status: 'ok',
+        vaultPath: config.vaultResolved,
+        vaultExists,
+        activeSseSessions: sseRegistry.size(),
+      });
+    }),
+  );
 
   return { app, sseRegistry };
 }

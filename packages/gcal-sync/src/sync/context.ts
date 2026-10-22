@@ -8,6 +8,8 @@ import type { SyncState } from './state.js';
 export interface CycleReport {
   /** Failures that were logged and skipped. A cycle with any of them is not counted as a success. */
   errors: number;
+  /** The first of them, in words, for the status file: the health check can then say what is wrong without the logs. */
+  firstError?: string;
   /** Notes that cannot be synced as they are (a date that is not a date, say), by vault path, with the reason. */
   problems: Map<string, string>;
 }
@@ -49,6 +51,7 @@ export function createContext(parts: ContextParts): SyncContext {
     now: parts.now ?? (() => new Date()),
     fail(message, err, fields) {
       report.errors++;
+      report.firstError ??= err === undefined ? message : `${message}: ${errorMessage(err)}`;
       log.error(message, { ...(err === undefined ? {} : { error: errorMessage(err) }), ...fields });
     },
     flag(path, reason) {

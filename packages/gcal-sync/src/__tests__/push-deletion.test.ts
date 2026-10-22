@@ -10,17 +10,42 @@ import { push } from './fakes.js';
 
 function setup(taskIds: string[], overrides: Partial<Config> = {}) {
   const deleted: string[] = [];
-  const tasks = { tasks: { delete: async ({ task }: { task: string }) => { deleted.push(task); } } } as unknown as tasks_v1.Tasks;
-  const calendar = { events: { delete: async () => { throw new Error('no calendar deletions expected'); } } } as unknown as calendar_v3.Calendar;
-  const state: SyncState = { calendarTokens: {}, tasksTokens: {}, knownTaskIds: { '@default': [...taskIds] }, knownEventIds: {} };
+  const tasks = {
+    tasks: {
+      delete: async ({ task }: { task: string }) => {
+        deleted.push(task);
+      },
+    },
+  } as unknown as tasks_v1.Tasks;
+  const calendar = {
+    events: {
+      delete: async () => {
+        throw new Error('no calendar deletions expected');
+      },
+    },
+  } as unknown as calendar_v3.Calendar;
+  const state: SyncState = {
+    calendarTokens: {},
+    tasksTokens: {},
+    knownTaskIds: { '@default': [...taskIds] },
+    knownEventIds: {},
+  };
   return { deleted, tasks, calendar, state, overrides };
 }
 
 async function emptyVault(): Promise<Config> {
   const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'gcal-push-'));
   return {
-    vaultPath: vault, vaultResolved: vault, clientId: 'x', clientSecret: 'x', refreshToken: 'x',
-    calendarIds: ['primary'], tasklistIds: ['@default'], pollIntervalMinutes: 5, allowMassDelete: false, cancelledRetentionDays: 30,
+    vaultPath: vault,
+    vaultResolved: vault,
+    clientId: 'x',
+    clientSecret: 'x',
+    refreshToken: 'x',
+    calendarIds: ['primary'],
+    tasklistIds: ['@default'],
+    pollIntervalMinutes: 5,
+    allowMassDelete: false,
+    cancelledRetentionDays: 30,
   };
 }
 

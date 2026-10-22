@@ -19,8 +19,11 @@ export function registerWriteNote(server: McpServer, { config }: ToolContext): v
     async ({ path: notePath, content, overwrite }) => {
       try {
         const fullPath = resolveVaultPath(config.vaultResolved, notePath);
-        
-        const exists = await fs.access(fullPath).then(() => true).catch(() => false);
+
+        const exists = await fs
+          .access(fullPath)
+          .then(() => true)
+          .catch(() => false);
         let trashedPath: string | undefined;
 
         if (exists) {
@@ -32,7 +35,7 @@ export function registerWriteNote(server: McpServer, { config }: ToolContext): v
 
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
         await fs.writeFile(fullPath, content, 'utf-8');
-        
+
         if (trashedPath) {
           return ok(`Overwrote ${notePath} (previous version backed up to ${trashedPath})`);
         }
@@ -40,6 +43,6 @@ export function registerWriteNote(server: McpServer, { config }: ToolContext): v
       } catch (err) {
         return fail(`Error writing note: ${errorMessage(err)}`);
       }
-    }
+    },
   );
 }

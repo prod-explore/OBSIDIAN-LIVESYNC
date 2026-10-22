@@ -20,83 +20,80 @@ function escapeRegExp(string: string) {
  * @returns number of files updated
  */
 export async function updateBacklinks(vaultRoot: string, oldRelPath: string, newRelPath: string): Promise<number> {
-    const files = await getAllMdFiles(vaultRoot);
+  const files = await getAllMdFiles(vaultRoot);
 
-    const oldName = path.basename(oldRelPath, '.md');
-    const newName = path.basename(newRelPath, '.md');
+  const oldName = path.basename(oldRelPath, '.md');
+  const newName = path.basename(newRelPath, '.md');
 
-    // Normalize paths to forward slashes for link matching
-    const oldRelPathForward = oldRelPath.replace(/\\/g, '/');
-    const newRelPathForward = newRelPath.replace(/\\/g, '/');
-    const stripMd = (p: string) => (p.endsWith('.md') ? p.slice(0, -3) : p);
-    const oldRelPathWithoutExt = stripMd(oldRelPathForward);
-    const newRelPathWithoutExt = stripMd(newRelPathForward);
+  // Normalize paths to forward slashes for link matching
+  const oldRelPathForward = oldRelPath.replace(/\\/g, '/');
+  const newRelPathForward = newRelPath.replace(/\\/g, '/');
+  const stripMd = (p: string) => (p.endsWith('.md') ? p.slice(0, -3) : p);
+  const oldRelPathWithoutExt = stripMd(oldRelPathForward);
+  const newRelPathWithoutExt = stripMd(newRelPathForward);
 
-    const movedTo = path.resolve(vaultRoot, newRelPath);
-    const nameIsShared = files.some(
-        (f) => path.resolve(f) !== movedTo && path.basename(f, '.md').toLowerCase() === oldName.toLowerCase()
-    );
-    // With a shared name only path-qualified links are unambiguous.
-    const usable = (target: string) => !nameIsShared || target.includes('/');
-    const wikiTargets = [...new Set([oldName, oldName + '.md', oldRelPathWithoutExt, oldRelPathForward])].filter(usable);
-    const mdTargets = [...new Set([
-        oldName + '.md',
-        oldRelPathForward,
-        encodeURI(oldName + '.md'),
-        encodeURI(oldRelPathForward),
-    ])].filter(usable);
+  const movedTo = path.resolve(vaultRoot, newRelPath);
+  const nameIsShared = files.some(
+    (f) => path.resolve(f) !== movedTo && path.basename(f, '.md').toLowerCase() === oldName.toLowerCase(),
+  );
+  // With a shared name only path-qualified links are unambiguous.
+  const usable = (target: string) => !nameIsShared || target.includes('/');
+  const wikiTargets = [...new Set([oldName, oldName + '.md', oldRelPathWithoutExt, oldRelPathForward])].filter(usable);
+  const mdTargets = [
+    ...new Set([oldName + '.md', oldRelPathForward, encodeURI(oldName + '.md'), encodeURI(oldRelPathForward)]),
+  ].filter(usable);
 
-    if (wikiTargets.length === 0 && mdTargets.length === 0) return 0;
+  if (wikiTargets.length === 0 && mdTargets.length === 0) return 0;
 
-    // [[Target]], [[Target#heading]], [[Target|alias]], [[Target#heading|alias]]
-    const wikilinkRegex = wikiTargets.length
-        ? new RegExp(`\\[\\[(${wikiTargets.map(escapeRegExp).join('|')})(#[^|\\]]*)?(\\|[^\\]]*)?\\]\\]`, 'gi')
-        : null;
-    // [alias](Target)
-    const mdLinkRegex = mdTargets.length
-        ? new RegExp(`\\[([^\\]]*)\\]\\((${mdTargets.map(escapeRegExp).join('|')})\\)`, 'gi')
-        : null;
+  // [[Target]], [[Target#heading]], [[Target|alias]], [[Target#heading|alias]]
+  const wikilinkRegex = wikiTargets.length
+    ? new RegExp(`\\[\\[(${wikiTargets.map(escapeRegExp).join('|')})(#[^|\\]]*)?(\\|[^\\]]*)?\\]\\]`, 'gi')
+    : null;
+  // [alias](Target)
+  const mdLinkRegex = mdTargets.length
+    ? new RegExp(`\\[([^\\]]*)\\]\\((${mdTargets.map(escapeRegExp).join('|')})\\)`, 'gi')
+    : null;
 
-    let updatedCount = 0;
+  let updatedCount = 0;
 
-    for (const file of files) {
-        const content = await fs.readFile(file, 'utf-8');
-        let newContent = content;
+  for (const file of files) {
+    const content = await fs.readFile(file, 'utf-8');
+    let newContent = content;
 
-        if (wikilinkRegex) {
-            newContent = newContent.replace(wikilinkRegex, (_match, target: string, heading?: string, alias?: string) => {
-                // A link that spelled out the folder keeps doing so; a bare name stays bare.
-                const to = target.includes('/') ? newRelPathWithoutExt : newName;
-                return `[[${to}${heading ?? ''}${alias ?? ''}]]`;
-            });
-        }
-        if (mdLinkRegex) {
-            newContent = newContent.replace(mdLinkRegex, (_match, text: string, target: string) => {
-                const to = target.includes('/') ? newRelPathForward : newName + '.md';
-                return `[${text}](${encodeURI(to)})`;
-            });
-        }
-
-        if (newContent !== content) {
-            await fs.writeFile(file, newContent, 'utf-8');
-            updatedCount++;
-        }
+    if (wikilinkRegex) {
+      newContent = newContent.replace(wikilinkRegex, (_match, target: string, heading?: string, alias?: string) => {
+        // A link that spelled out the folder keeps doing so; a bare name stays bare.
+        const to = target.includes('/') ? newRelPathWithoutExt : newName;
+        return `[[${to}${heading ?? ''}${alias ?? ''}]]`;
+      });
+    }
+    if (mdLinkRegex) {
+      newContent = newContent.replace(mdLinkRegex, (_match, text: string, target: string) => {
+        const to = target.includes('/') ? newRelPathForward : newName + '.md';
+        return `[${text}](${encodeURI(to)})`;
+      });
     }
 
-    return updatedCount;
+    if (newContent !== content) {
+      await fs.writeFile(file, newContent, 'utf-8');
+      updatedCount++;
+    }
+  }
+
+  return updatedCount;
 }
 
 async function getAllMdFiles(dir: string, fileList: string[] = []): Promise<string[]> {
-    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
-    for (const entry of entries) {
-        if (entry.name.startsWith('.')) continue; // skip .trash, .obsidian, .git
-        
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-            await getAllMdFiles(fullPath, fileList);
-        } else if (entry.isFile() && entry.name.endsWith('.md')) {
-            fileList.push(fullPath);
-        }
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue; // skip .trash, .obsidian, .git
+
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await getAllMdFiles(fullPath, fileList);
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      fileList.push(fullPath);
     }
-    return fileList;
+  }
+  return fileList;
 }

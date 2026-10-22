@@ -15,6 +15,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: lint, format, types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      # The two packages keep their own copy of the logger (they are built and shipped separately).
+      - name: logger.ts is identical in both packages
+        run: diff packages/mcp/src/logger.ts packages/gcal-sync/src/logger.ts
+
   test:
     name: test (${{ matrix.package }})
     runs-on: ubuntu-latest
@@ -29,7 +46,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test --workspace packages/${{ matrix.package }} # type-checks (strict), builds, runs every test
+      # Type-checks (strict), builds, runs every test, and fails below the coverage floor in .c8rc.json.
+      - name: test with coverage
+        shell: bash
+        run: |
+          npm run test:coverage --workspace packages/${{ matrix.package }} | tee coverage.txt
+          { echo '### Coverage: ${{ matrix.package }}'; echo '```'; sed -n '/^-----/,$p' coverage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   audit:
     name: npm audit

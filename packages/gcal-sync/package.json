@@ -10,7 +10,8 @@
     "dev": "tsc --watch & node --watch dist/index.js",
     "test": "npm run build && node --test dist/__tests__/*.test.js",
     "get-token": "tsx scripts/get-refresh-token.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:coverage": "npm run build && c8 node --test dist/__tests__/*.test.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

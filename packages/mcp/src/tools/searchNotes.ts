@@ -11,7 +11,13 @@ import { ok, fail, ToolContext } from './types.js';
  * there is no cache here, so results can only be stale if the vault sync itself
  * (e.g. LiveSync replication from a client to this container) hasn't caught up yet.
  */
-async function walkAndSearch(dir: string, vaultRoot: string, query: string, results: string[], limit: number): Promise<void> {
+async function walkAndSearch(
+  dir: string,
+  vaultRoot: string,
+  query: string,
+  results: string[],
+  limit: number,
+): Promise<void> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (results.length >= limit) return;
@@ -46,15 +52,22 @@ export function registerSearchNotes(server: McpServer, { config }: ToolContext):
     async ({ query }) => {
       try {
         const results: string[] = [];
-        await walkAndSearch(config.vaultResolved, config.vaultResolved, query.toLowerCase(), results, MAX_SEARCH_RESULTS);
+        await walkAndSearch(
+          config.vaultResolved,
+          config.vaultResolved,
+          query.toLowerCase(),
+          results,
+          MAX_SEARCH_RESULTS,
+        );
         if (results.length === 0) return ok(`No notes found matching "${query}".`);
-        const capped = results.length >= MAX_SEARCH_RESULTS
-          ? `\n\n(Stopped at ${MAX_SEARCH_RESULTS} results — narrow the query to see the rest.)`
-          : '';
+        const capped =
+          results.length >= MAX_SEARCH_RESULTS
+            ? `\n\n(Stopped at ${MAX_SEARCH_RESULTS} results — narrow the query to see the rest.)`
+            : '';
         return ok(`Found ${results.length} notes matching "${query}":\n\n${results.join('\n')}${capped}`);
       } catch (err) {
         return fail(`Error searching notes: ${errorMessage(err)}`);
       }
-    }
+    },
   );
 }

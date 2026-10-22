@@ -39,10 +39,7 @@ test('get_path: resolveVaultPath allows a simple relative file path', async () =
 test('get_path: resolveVaultPath blocks parent-directory traversal', async () => {
   const vault = await makeTmpVault();
   try {
-    assert.throws(
-      () => resolveVaultPath(vault, '../../etc/passwd'),
-      PathTraversalError
-    );
+    assert.throws(() => resolveVaultPath(vault, '../../etc/passwd'), PathTraversalError);
   } finally {
     await cleanup(vault);
   }
@@ -51,10 +48,7 @@ test('get_path: resolveVaultPath blocks parent-directory traversal', async () =>
 test('get_path: resolveVaultPath blocks absolute path outside vault', async () => {
   const vault = await makeTmpVault();
   try {
-    assert.throws(
-      () => resolveVaultPath(vault, '/etc/passwd'),
-      PathTraversalError
-    );
+    assert.throws(() => resolveVaultPath(vault, '/etc/passwd'), PathTraversalError);
   } finally {
     await cleanup(vault);
   }
@@ -63,10 +57,7 @@ test('get_path: resolveVaultPath blocks absolute path outside vault', async () =
 test('get_path: resolveVaultPath blocks sneaky path that escapes via subfolder', async () => {
   const vault = await makeTmpVault();
   try {
-    assert.throws(
-      () => resolveVaultPath(vault, 'Folder/../../etc/passwd'),
-      PathTraversalError
-    );
+    assert.throws(() => resolveVaultPath(vault, 'Folder/../../etc/passwd'), PathTraversalError);
   } finally {
     await cleanup(vault);
   }
@@ -75,10 +66,7 @@ test('get_path: resolveVaultPath blocks sneaky path that escapes via subfolder',
 test('get_path: resolveVaultPath does not false-positive on sibling folder with shared prefix', async () => {
   const vault = await makeTmpVault();
   try {
-    assert.throws(
-      () => resolveVaultPath(vault, '../' + path.basename(vault) + '-other/secret.md'),
-      PathTraversalError
-    );
+    assert.throws(() => resolveVaultPath(vault, '../' + path.basename(vault) + '-other/secret.md'), PathTraversalError);
   } finally {
     await cleanup(vault);
   }
@@ -167,7 +155,7 @@ test('get_path: non-existent path throws ENOENT', async () => {
     const missingPath = path.join(vault, 'does-not-exist.md');
     await assert.rejects(
       () => fs.stat(missingPath),
-      (err: NodeJS.ErrnoException) => err.code === 'ENOENT'
+      (err: NodeJS.ErrnoException) => err.code === 'ENOENT',
     );
   } finally {
     await cleanup(vault);
