@@ -10,6 +10,7 @@ import { ARCHIVE_PREFIX, eventNotePath } from './archive.js';
 import { getTasklists } from './tasklists.js';
 import { logConflict } from './conflicts.js';
 import { renameAndRefactorLinks } from './refactor.js';
+import { DEFAULT_LIST, toActive, toArchive, isArchivedPath, taskFolder } from './folders.js';
 
 /** Events further ahead than this are not brought in: an endless recurrence would otherwise fill the vault. */
 const MAX_DAYS_AHEAD = 730;
@@ -404,14 +405,14 @@ async function ingestTask(
   // The note's folder follows the task's status in both directions: open → {Tasks}, completed or
   // cancelled → 04-Archive/{Tasks}, and back if a task is re-opened in Google.
   const isArchived = frontmatter.status === 'completed' || frontmatter.status === 'cancelled';
-  const currentlyArchived = existingFile?.startsWith(`${ARCHIVE_PREFIX}/`) ?? false;
+  const currentlyArchived = existingFile ? isArchivedPath(existingFile) : false;
 
   let targetRelative: string;
   if (existingFile) {
     if (isArchived && !currentlyArchived) {
-      targetRelative = `${ARCHIVE_PREFIX}/${existingFile}`;
+      targetRelative = toArchive(existingFile);
     } else if (!isArchived && currentlyArchived) {
-      targetRelative = existingFile.slice(`${ARCHIVE_PREFIX}/`.length);
+      targetRelative = toActive(existingFile);
     } else {
       targetRelative = existingFile;
     }
@@ -419,8 +420,8 @@ async function ingestTask(
     // A new note gets a creation-date prefix that never changes, so the explorer sorts chronologically
     // without encoding anything mutable in the name.
     const createdPrefix = new Date().toISOString().slice(0, 10);
-    const folder = isDefault ? '{Tasks}' : `{Tasks}/${listName}`;
-    const dir = isArchived ? `${ARCHIVE_PREFIX}/${folder}` : folder;
+    const folder = taskFolder(isDefault ? DEFAULT_LIST : listName);
+    const dir = isArchived ? toArchive(folder) : folder;
     targetRelative = `${dir}/${createdPrefix}-${sanitizeTitle(task.title || 'Untitled Task')}-${task.id.substring(0, 8)}.md`;
   }
 
