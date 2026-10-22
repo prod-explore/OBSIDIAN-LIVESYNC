@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { errorCode } from './errors.js';
 
 export class PathTraversalError extends Error {
   constructor(attemptedPath: string) {
@@ -37,8 +38,8 @@ function assertNoSymlinkEscape(vaultRoot: string, resolved: string, attempted: s
     let stat: fs.Stats;
     try {
       stat = fs.lstatSync(current);
-    } catch (err: any) {
-      if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return; // the rest does not exist yet
+    } catch (err) {
+      if (errorCode(err) === 'ENOENT' || errorCode(err) === 'ENOTDIR') return; // the rest does not exist yet
       throw err;
     }
     if (!stat.isSymbolicLink()) continue;

@@ -1,4 +1,6 @@
 /**
+ * NOTE: this file is kept byte-identical in packages/gcal-sync/src/logger.ts and packages/mcp/src/logger.ts (CI checks it).
+ *
  * A small structured logger: one line per event, `json` (default when there is no terminal, which is what
  * `docker logs` and a log shipper want) or `text` (default at a terminal). Level and format come from LOG_LEVEL
  * (debug, info, warn, error, silent) and LOG_FORMAT (json, text).

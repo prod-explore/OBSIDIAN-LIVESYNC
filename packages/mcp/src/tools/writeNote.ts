@@ -4,6 +4,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { resolveVaultPath } from '../security.js';
 import { moveToTrash } from '../trash.js';
+import { errorMessage } from '../errors.js';
 import { ok, fail, ToolContext } from './types.js';
 
 export function registerWriteNote(server: McpServer, { config }: ToolContext): void {
@@ -36,8 +37,8 @@ export function registerWriteNote(server: McpServer, { config }: ToolContext): v
           return ok(`Overwrote ${notePath} (previous version backed up to ${trashedPath})`);
         }
         return ok(`Successfully wrote note to ${notePath}`);
-      } catch (err: any) {
-        return fail(`Error writing note: ${err.message}`);
+      } catch (err) {
+        return fail(`Error writing note: ${errorMessage(err)}`);
       }
     }
   );

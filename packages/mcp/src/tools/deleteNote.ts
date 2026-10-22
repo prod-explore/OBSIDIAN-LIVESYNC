@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as fs from 'fs/promises';
 import { resolveVaultPath } from '../security.js';
 import { moveToTrash } from '../trash.js';
+import { errorMessage } from '../errors.js';
 import { ok, fail, ToolContext } from './types.js';
 
 /**
@@ -32,8 +33,8 @@ export function registerDeleteNote(server: McpServer, { config }: ToolContext): 
 
         const trashedPath = await moveToTrash(config.vaultResolved, config.trashDir, notePath);
         return ok(`Moved to trash: ${notePath} → ${trashedPath}`);
-      } catch (err: any) {
-        return fail(`Error deleting note: ${err.message}`);
+      } catch (err) {
+        return fail(`Error deleting note: ${errorMessage(err)}`);
       }
     }
   );

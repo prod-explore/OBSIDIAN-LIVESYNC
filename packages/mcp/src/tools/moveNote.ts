@@ -4,6 +4,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { resolveVaultPath } from '../security.js';
 import { moveToTrash } from '../trash.js';
+import { errorMessage } from '../errors.js';
+import { logger } from '../logger.js';
 import { ok, fail, ToolContext } from './types.js';
 
 import { updateBacklinks } from './refactorLinks.js';
@@ -60,16 +62,17 @@ export function registerMoveNote(server: McpServer, { config }: ToolContext): vo
         let updatedCount = 0;
         try {
           updatedCount = await updateBacklinks(config.vaultResolved, from, to);
-        } catch (err: any) {
-          console.error('Failed to update backlinks:', err);
+        } catch (err) {
+          // The move itself succeeded; say so, and say that the links are not updated.
+          logger.warn('Moved a note but could not update the links to it', { from, to, error: errorMessage(err) });
         }
         
         if (trashedPath) {
           return ok(`Moved ${from} → ${to} (overwritten file backed up to ${trashedPath}). Updated ${updatedCount} backlink(s).`);
         }
         return ok(`Moved ${from} → ${to}. Updated ${updatedCount} backlink(s).`);
-      } catch (err: any) {
-        return fail(`Error moving note: ${err.message}`);
+      } catch (err) {
+        return fail(`Error moving note: ${errorMessage(err)}`);
       }
     }
   );

@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { resolveVaultPath } from '../security.js';
+import { errorMessage, isFileMissing } from '../errors.js';
 import { ok, fail, ToolContext } from './types.js';
 
 /**
@@ -63,13 +64,13 @@ export function registerGetPath(server: McpServer, { config }: ToolContext): voi
         }
 
         return fail(`Path exists but is neither a file nor a directory: ${inputPath}`);
-      } catch (err: any) {
-        if (err.code === 'ENOENT') {
+      } catch (err) {
+        if (isFileMissing(err)) {
           return fail(`Path not found: ${inputPath}`);
         }
         // Re-throw PathTraversalError and other unexpected errors so they're
         // surfaced as tool errors rather than silently swallowed.
-        return fail(`Error accessing path: ${err.message}`);
+        return fail(`Error accessing path: ${errorMessage(err)}`);
       }
     }
   );
