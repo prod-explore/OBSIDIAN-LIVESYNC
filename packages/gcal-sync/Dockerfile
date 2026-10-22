@@ -1,6 +1,6 @@
 # Build from the repository root (the dependencies are locked once, for the whole workspace):
 #   docker build -f packages/gcal-sync/Dockerfile .
-FROM node:22-alpine AS builder
+FROM node:25-alpine AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY packages/gcal-sync/tsconfig.json packages/gcal-sync/
 COPY packages/gcal-sync/src packages/gcal-sync/src
 RUN npm run build --workspace packages/gcal-sync
 
-FROM node:22-alpine
+FROM node:25-alpine
 
 WORKDIR /app
 
