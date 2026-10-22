@@ -103,7 +103,7 @@ Clients that can send headers should use `Authorization: Bearer YOUR_MCP_API_KEY
 | `move_note` | `from`, `to`, `overwrite` (default `false`) | Atomic rename; rewrites backlinks (wikilinks with headings and aliases, and Markdown links). |
 | `delete_note` | `path` | Soft delete into `.trash/`, timestamp-prefixed. |
 
-What the server tells a client when it connects is configurable with `MCP_INSTRUCTIONS` (by default: read `_Systems/AGENTS.md` in the vault, if you keep one). Other settings are listed in [`docs/operations.md`](docs/operations.md#mcp-server).
+The server sends clients no instructions of its own. If your vault keeps its own rules file, point agents at it with `MCP_INSTRUCTIONS` (for example `Before any vault operation, read _Systems/AGENTS.md.`). Other settings are listed in [`docs/operations.md`](docs/operations.md#mcp-server).
 
 ## Google Calendar & Tasks sync
 
