@@ -21,30 +21,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [mcp-src, gcal-sync-src]
-    defaults:
-      run:
-        working-directory: ${{ matrix.package }}
+        package: [mcp, gcal-sync]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: ${{ matrix.package }}/package-lock.json
       - run: npm ci
-      - run: npm test # type-checks (strict), builds, runs every test
+      - run: npm test --workspace packages/${{ matrix.package }} # type-checks (strict), builds, runs every test
 
   audit:
-    name: npm audit (${{ matrix.package }})
+    name: npm audit
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package: [mcp-src, gcal-sync-src]
-    defaults:
-      run:
-        working-directory: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -59,10 +48,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [mcp-src, gcal-sync-src]
+        package: [mcp, gcal-sync]
     steps:
       - uses: actions/checkout@v4
-      - run: docker build ${{ matrix.package }}
+      - run: docker build -f packages/${{ matrix.package }}/Dockerfile .
 
   compose:
     name: docker compose config
