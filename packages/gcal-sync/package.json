@@ -14,7 +14,7 @@
     "test:coverage": "npm run build && c8 node --test dist/__tests__/*.test.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
+    "dotenv": "^18.0.8",
     "googleapis": "^144.0.0",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.0",
