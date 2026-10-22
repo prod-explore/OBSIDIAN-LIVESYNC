@@ -22,3 +22,10 @@ test('serializeNote reconstructs note accurately', () => {
   assert.ok(serialized.includes('---'));
   assert.ok(serialized.includes('# Notes'));
 });
+
+test('parsing the same text twice gives independent objects (no shared cache)', () => {
+  const text = '---\ntitle: Buy milk\n---\n';
+  const first = parseNote(text);
+  first.frontmatter.google_id = 'abc';
+  assert.equal(parseNote(text).frontmatter.google_id, undefined);
+});
