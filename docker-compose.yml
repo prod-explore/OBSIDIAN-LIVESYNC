@@ -53,8 +53,9 @@ services:
 
   obsidian-mcp:
     build:
-      context: ./mcp-src
-      dockerfile: Dockerfile
+      # The repository root: the packages share one lockfile (see packages/mcp/Dockerfile).
+      context: .
+      dockerfile: packages/mcp/Dockerfile
     container_name: obsidian-mcp
     restart: unless-stopped
     environment:
@@ -80,8 +81,8 @@ services:
 
   obsidian-gcal-sync:
     build:
-      context: ./gcal-sync-src
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: packages/gcal-sync/Dockerfile
     container_name: obsidian-gcal-sync
     restart: unless-stopped
     # A cycle that is mid-write gets time to finish when the container is stopped.

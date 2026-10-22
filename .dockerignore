@@ -1,0 +1,18 @@
+# Both images are built from the repository root (docker build -f packages/<name>/Dockerfile .):
+# send only what they need.
+.git
+.github
+**/node_modules
+**/dist
+**/coverage
+.env
+.env.*
+!.env.example
+**/*.log
+data
+config
+vault
+gcal-sync-state
+docs
+deploy
+*.md

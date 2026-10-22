@@ -1,0 +1,21 @@
+{
+  "name": "obsidian-livesync",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A self-hosted Obsidian vault that syncs between devices, is readable by AI clients over MCP, and stays in step with Google Calendar and Tasks",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm test --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  }
+}

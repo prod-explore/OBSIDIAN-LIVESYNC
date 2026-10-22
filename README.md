@@ -15,8 +15,8 @@ It is built around one assumption: **the client is a language model**. It can be
 |---|---|
 | `obsidian-couchdb` | The database behind [Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync): your devices sync notes through it |
 | `obsidian-headless` | Obsidian itself, headless, running the LiveSync plugin to turn the database into plain Markdown files |
-| [`obsidian-mcp`](mcp-src) | The MCP server: seven tools over those files (Streamable HTTP and legacy SSE) |
-| [`obsidian-gcal-sync`](gcal-sync-src) | Two-way sync of Google Calendar events and Google Tasks with Markdown notes in the vault |
+| [`obsidian-mcp`](packages/mcp) | The MCP server: seven tools over those files (Streamable HTTP and legacy SSE) |
+| [`obsidian-gcal-sync`](packages/gcal-sync) | Two-way sync of Google Calendar events and Google Tasks with Markdown notes in the vault |
 
 ```mermaid
 flowchart LR
@@ -118,7 +118,7 @@ On connect every client gets the tool list and one line pointing it at `_Systems
 Setup: create a Google Cloud project, enable the Calendar and Tasks APIs and create an OAuth client (Desktop app). Put `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` into `.env`, then get a refresh token on a machine with a browser:
 
 ```bash
-cd gcal-sync-src && npm ci && npm run get-token   # reads ../.env, listens on localhost:3000 for Google's redirect
+npm ci && npm run get-token --workspace packages/gcal-sync   # reads .env, listens on localhost:3000 for Google's redirect
 ```
 
 Add the printed `GOOGLE_REFRESH_TOKEN` to `.env` and run `docker compose up -d --build obsidian-gcal-sync`.
@@ -128,8 +128,9 @@ Known limits: the `{Tasks}`, `{Calendar}` and `04-Archive` folder names are fixe
 ## Development
 
 ```bash
-cd mcp-src && npm ci && npm test            # strict type-check, build, 58 tests
-cd gcal-sync-src && npm ci && npm test      # strict type-check, build, 70 tests
+npm ci
+npm test --workspace packages/mcp            # strict type-check, build, 58 tests
+npm test --workspace packages/gcal-sync      # strict type-check, build, 71 tests
 ```
 
 CI runs both, plus `npm audit` on runtime dependencies, a Docker build of each image, a validation of the compose file and a secret scan. The tests include real symbolic links on disk, an HTTP-level suite for the server (auth, both transports, the list of tools), and the whole sync (ingest, push and full cycles) run against in-memory stand-ins for the Google APIs, including a simulated vault outage, expired tokens and failing writes.

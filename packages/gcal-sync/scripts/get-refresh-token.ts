@@ -1,10 +1,11 @@
 import { google } from 'googleapis';
 import * as http from 'http';
 import * as url from 'url';
+import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
 
 // Load variables from .env if present
-dotenv.config({ path: '../.env' });
+dotenv.config({ path: fileURLToPath(new URL('../../../.env', import.meta.url)) });
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'MISSING_CLIENT_ID';
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'MISSING_CLIENT_SECRET';
