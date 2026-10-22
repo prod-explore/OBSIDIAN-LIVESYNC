@@ -2,6 +2,7 @@
   "name": "obsidian-livesync",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "A self-hosted Obsidian vault that syncs between devices, is readable by AI clients over MCP, and stays in step with Google Calendar and Tasks",
   "license": "MIT",
   "workspaces": [
@@ -14,8 +15,19 @@
     "build": "npm run build --workspaces",
     "test": "npm test --workspaces",
     "typecheck": "npm run typecheck --workspaces",
-    "lint": "eslint .",
+    "lint": "node --max-old-space-size=6144 ./node_modules/eslint/bin/eslint.js .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:coverage": "npm run test:coverage --workspaces"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "c8": "^10.1.3",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.0"
   }
 }

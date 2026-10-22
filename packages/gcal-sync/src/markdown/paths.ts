@@ -22,6 +22,8 @@ function truncateToBytes(text: string, maxBytes: number): string {
  * (The full title stays in the note's frontmatter.)
  */
 export function sanitizeTitle(title: string): string {
+  // Control characters are exactly what is being removed here.
+  // eslint-disable-next-line no-control-regex
   const cleaned = title.replace(/[<>:"/\\|?*\x00-\x1F]/g, '-').trim();
   return truncateToBytes(cleaned, MAX_TITLE_BYTES).trim() || 'Untitled';
 }
