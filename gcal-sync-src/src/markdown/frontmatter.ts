@@ -9,7 +9,10 @@ export interface ParsedNote {
  * Parses a markdown string into its YAML frontmatter and body components.
  */
 export function parseNote(content: string): ParsedNote {
-  const parsed = matter(content);
+  // The (empty) options object is deliberate. Without options gray-matter caches the result per input text and
+  // hands out the same `data` object every time, so a caller that fills in `google_id` on one note would
+  // silently give that id to every other note (or later read) with identical text.
+  const parsed = matter(content, {});
   return {
     frontmatter: parsed.data,
     body: parsed.content
