@@ -11,17 +11,26 @@ export interface Config {
   sseSessionMaxAgeMs: number;
   /** How often (ms) the sweep checks for stale SSE sessions. */
   sseSweepIntervalMs: number;
-  /** Sent to every client on connect (MCP `instructions`); undefined = send none. From MCP_INSTRUCTIONS. */
+  /** Sent to every client on connect (MCP `instructions`); undefined = send none. See resolveInstructions(). */
   instructions: string | undefined;
 }
 
 /**
- * What clients are told on connect (the MCP `instructions` field): the text in MCP_INSTRUCTIONS, or nothing.
- * There is deliberately no built-in default; a vault that has its own rules file says so here.
- * Unset and empty both mean "nothing", so a compose file can pass the variable through safely.
+ * The pointer every client gets on connect (the MCP `instructions` field), next to the tool list. It only says
+ * where the vault owner keeps their own rules; the server never creates or fills that file, and what is in it
+ * (structure, conventions, how to work in the vault) is entirely the owner's.
+ */
+export const DEFAULT_INSTRUCTIONS =
+  "Before any vault operation, read `_Systems/AGENTS.md` if the vault has one: it holds the owner's rules for the vault's structure and for working in it.";
+
+/**
+ * MCP_INSTRUCTIONS replaces the default text; the value `none` sends no instructions at all.
+ * Unset and empty both mean "the default", so a compose file can pass the variable through safely.
  */
 export function resolveInstructions(env: NodeJS.ProcessEnv): string | undefined {
-  return env.MCP_INSTRUCTIONS?.trim() || undefined;
+  const value = env.MCP_INSTRUCTIONS?.trim();
+  if (!value) return DEFAULT_INSTRUCTIONS;
+  return value.toLowerCase() === 'none' ? undefined : value;
 }
 
 /**
