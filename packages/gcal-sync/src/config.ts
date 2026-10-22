@@ -11,6 +11,11 @@ export interface Config {
   pollIntervalMinutes: number;
   /** Lets push delete most of a list on Google in one cycle (see sync/safety.ts). Off unless ALLOW_MASS_DELETE=true. */
   allowMassDelete: boolean;
+  /**
+   * How long a cancelled note with an empty body is kept before the sync removes it (see sync/retention.ts).
+   * 0 keeps them for ever.
+   */
+  cancelledRetentionDays: number;
 }
 
 export function loadConfig(): Config {
@@ -38,6 +43,12 @@ export function loadConfig(): Config {
     throw new Error('POLL_INTERVAL_MINUTES must be a whole number from 1 to 59');
   }
 
+  const retentionRaw = process.env.CANCELLED_RETENTION_DAYS || '30';
+  const cancelledRetentionDays = Number(retentionRaw);
+  if (!Number.isInteger(cancelledRetentionDays) || cancelledRetentionDays < 0 || cancelledRetentionDays > 3650) {
+    throw new Error('CANCELLED_RETENTION_DAYS must be a whole number of days from 0 (keep for ever) to 3650');
+  }
+
   return {
     vaultPath,
     vaultResolved: path.resolve(vaultPath),
@@ -48,5 +59,6 @@ export function loadConfig(): Config {
     tasklistIds,
     pollIntervalMinutes,
     allowMassDelete: process.env.ALLOW_MASS_DELETE === 'true',
+    cancelledRetentionDays,
   };
 }

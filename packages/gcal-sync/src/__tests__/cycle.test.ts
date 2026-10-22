@@ -4,9 +4,7 @@ import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { ingestGoogleData } from '../sync/ingest.js';
-import { pushVaultData } from '../sync/push.js';
-import { emptyState, exists, fakeCalendar, fakeTasks, listNotes, makeVault, readNote, removeVaults, writeNote } from './fakes.js';
+import { emptyState, exists, fakeCalendar, fakeTasks, ingest, listNotes, makeVault, push, readNote, removeVaults, writeNote } from './fakes.js';
 
 after(removeVaults);
 
@@ -43,8 +41,8 @@ function googleTasks(lists?: Array<{ id: string; title: string }>) {
 
 async function cycle(config: Awaited<ReturnType<typeof makeVault>>, state: ReturnType<typeof emptyState>, g: ReturnType<typeof googleTasks>) {
   const cal = fakeCalendar();
-  await ingestGoogleData(config, state, cal.client, g.client);
-  await pushVaultData(config, state, cal.client, g.client);
+  await ingest(config, state, cal.client, g.client);
+  await push(config, state, cal.client, g.client);
 }
 
 test('a task made in Obsidian settles after one round trip: no conflict, no second patch', async () => {

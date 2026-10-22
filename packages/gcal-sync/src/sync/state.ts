@@ -1,25 +1,31 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { isFileMissing } from '../errors.js';
+import { logger as defaultLogger, type Logger } from '../logger.js';
 
 export interface SyncState {
   calendarTokens: Record<string, string>;
   tasksTokens:    Record<string, string>;
   // Manifest of google_ids known to exist per tasklist/calendar.
-  // Used by push.ts to detect file deletions (ids that vanished from the vault).
+  // Used by push to detect file deletions (ids that vanished from the vault).
   knownTaskIds:   Record<string, string[]>; // tasklistId → [googleId, ...]
   knownEventIds:  Record<string, string[]>; // calendarId → [googleId, ...]
 }
 
-function emptyState(): SyncState {
+export function emptyState(): SyncState {
   return { calendarTokens: {}, tasksTokens: {}, knownTaskIds: {}, knownEventIds: {} };
+}
+
+/** Where the sync keeps what it must remember between runs (sync-state.json, status.json). */
+export function dataDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.DATA_PATH || path.resolve(process.cwd(), 'gcal-sync-state');
 }
 
 export class StateManager {
   private stateFile: string;
 
-  constructor() {
-    const dataDir = process.env.DATA_PATH || path.resolve(process.cwd(), 'gcal-sync-state');
-    this.stateFile = path.join(dataDir, 'sync-state.json');
+  constructor(private readonly log: Logger = defaultLogger, dir: string = dataDir()) {
+    this.stateFile = path.join(dir, 'sync-state.json');
   }
 
   /**
@@ -31,18 +37,18 @@ export class StateManager {
     let content: string;
     try {
       content = await fs.readFile(this.stateFile, 'utf-8');
-    } catch (err: any) {
-      if (err.code === 'ENOENT') return emptyState();
+    } catch (err) {
+      if (isFileMissing(err)) return emptyState();
       throw err;
     }
 
     let raw: Partial<SyncState>;
     try {
-      raw = JSON.parse(content);
+      raw = JSON.parse(content) as Partial<SyncState>;
     } catch {
       const aside = `${this.stateFile}.corrupt-${Date.now()}`;
       await fs.rename(this.stateFile, aside).catch(() => {});
-      console.error(`[State] ${this.stateFile} is not valid JSON. Moved to ${aside}; starting from an empty state (full re-sync).`);
+      this.log.error('State file is not valid JSON; moved aside and starting from an empty state (full re-sync)', { file: this.stateFile, movedTo: aside });
       return emptyState();
     }
 
@@ -55,16 +61,19 @@ export class StateManager {
     };
   }
 
-  /** Writes to a temporary file and renames it over the real one, so a crash mid-write cannot leave half a file. */
+  /**
+   * Writes to a temporary file and renames it over the real one, so a crash mid-write cannot leave half a file.
+   * Throws when it cannot write: a cycle whose progress was not saved is not a success.
+   */
   async save(state: SyncState): Promise<void> {
     const tmp = `${this.stateFile}.tmp`;
     try {
       await fs.mkdir(path.dirname(this.stateFile), { recursive: true });
       await fs.writeFile(tmp, JSON.stringify(state, null, 2), 'utf-8');
       await fs.rename(tmp, this.stateFile);
-    } catch (err: any) {
-      console.error(`Error saving sync state: ${err.message}`);
+    } catch (err) {
       await fs.rm(tmp, { force: true }).catch(() => {});
+      throw err;
     }
   }
 }

@@ -5,8 +5,13 @@ import * as os from 'os';
 import * as path from 'path';
 import type { calendar_v3, tasks_v1 } from 'googleapis';
 import type { Config } from '../config.js';
-import type { SyncState } from '../sync/state.js';
+import { createLogger } from '../logger.js';
+import { createContext, type SyncContext } from '../sync/context.js';
+import { ingestGoogleData } from '../sync/ingest.js';
+import { pushVaultData } from '../sync/push/index.js';
+import { emptyState as freshState, type SyncState } from '../sync/state.js';
 import { parseNote, serializeNote } from '../markdown/frontmatter.js';
+import type { RawFrontmatter } from '../markdown/notes.js';
 
 // ── vault ───────────────────────────────────────────────────────────────────
 
@@ -30,15 +35,14 @@ export async function makeVault(overrides: Partial<Config> = {}): Promise<Config
     tasklistIds: ['@default'],
     pollIntervalMinutes: 5,
     allowMassDelete: false,
+    cancelledRetentionDays: 30,
     ...overrides,
   };
 }
 
-export function emptyState(): SyncState {
-  return { calendarTokens: {}, tasksTokens: {}, knownTaskIds: {}, knownEventIds: {} };
-}
+export const emptyState = freshState;
 
-export async function writeNote(config: Config, rel: string, frontmatter: Record<string, any>, body = ''): Promise<void> {
+export async function writeNote(config: Config, rel: string, frontmatter: RawFrontmatter, body = ''): Promise<void> {
   const full = path.join(config.vaultResolved, rel);
   await fs.mkdir(path.dirname(full), { recursive: true });
   await fs.writeFile(full, serializeNote(frontmatter, body), 'utf-8');
@@ -64,6 +68,38 @@ export async function listNotes(config: Config, rel = ''): Promise<string[]> {
   }
   await walk(rel);
   return out.sort();
+}
+
+// ── sync context ────────────────────────────────────────────────────────────
+
+/** A log line the test run captured. */
+export interface Captured { level: string; line: string }
+
+/** A context over fake clients. Its logger is silent unless `lines` is given to collect what is logged. */
+export function syncContext(
+  config: Config,
+  state: SyncState,
+  calendar: calendar_v3.Calendar,
+  tasks: tasks_v1.Tasks,
+  options: { lines?: Captured[]; now?: () => Date } = {},
+): SyncContext {
+  const { lines } = options;
+  const log = createLogger({ level: lines ? 'debug' : 'silent', format: 'text', write: (line, level) => lines?.push({ level, line }) });
+  return createContext({ config, state, calendar, tasks, log, now: options.now });
+}
+
+/** One ingest pass; returns the context so a test can look at `report`. */
+export async function ingest(config: Config, state: SyncState, calendar: calendar_v3.Calendar, tasks: tasks_v1.Tasks): Promise<SyncContext> {
+  const ctx = syncContext(config, state, calendar, tasks);
+  await ingestGoogleData(ctx);
+  return ctx;
+}
+
+/** One push pass; returns the context so a test can look at `report`. */
+export async function push(config: Config, state: SyncState, calendar: calendar_v3.Calendar, tasks: tasks_v1.Tasks): Promise<SyncContext> {
+  const ctx = syncContext(config, state, calendar, tasks);
+  await pushVaultData(ctx);
+  return ctx;
 }
 
 // ── dates ───────────────────────────────────────────────────────────────────

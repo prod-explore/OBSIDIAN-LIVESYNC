@@ -1,12 +1,14 @@
 import matter from 'gray-matter';
+import type { RawFrontmatter } from './notes.js';
 
 export interface ParsedNote {
-  frontmatter: Record<string, any>;
+  frontmatter: RawFrontmatter;
   body: string;
 }
 
 /**
- * Parses a markdown string into its YAML frontmatter and body components.
+ * Parses a markdown string into its YAML frontmatter and body components. Throws when the YAML is not valid.
+ * What comes back is as the parser typed it; `readTaskNote` / `readEventNote` make it a typed note.
  */
 export function parseNote(content: string): ParsedNote {
   // The (empty) options object is deliberate. Without options gray-matter caches the result per input text and
@@ -15,19 +17,19 @@ export function parseNote(content: string): ParsedNote {
   const parsed = matter(content, {});
   return {
     frontmatter: parsed.data,
-    body: parsed.content
+    body: parsed.content,
   };
 }
 
 /**
  * Serializes frontmatter and body back into a markdown string with YAML blocks.
  */
-export function serializeNote(frontmatter: Record<string, any>, body: string): string {
+export function serializeNote(frontmatter: RawFrontmatter, body: string): string {
   // Ensure that empty body doesn't end up lacking a newline after the frontmatter closing block
   let normalizedBody = body;
   if (normalizedBody.length > 0 && !normalizedBody.startsWith('\n')) {
     normalizedBody = '\n' + normalizedBody;
   }
-  
+
   return matter.stringify(normalizedBody, frontmatter);
 }

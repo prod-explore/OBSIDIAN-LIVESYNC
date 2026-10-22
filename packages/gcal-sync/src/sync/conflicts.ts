@@ -1,29 +1,31 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { resolveVaultPath } from '../markdown/paths.js';
+import type { SyncContext } from './context.js';
 
+const CONFLICT_LOG = '_Systems/sync-conflicts.md';
+
+/** Appends what lost (and why) to the conflict log in the vault, so a decision the sync made for you can be looked at later. */
 export async function logConflict(
-  vaultRoot: string,
+  ctx: SyncContext,
   resourceName: string,
-  localValue: any,
-  googleValue: any,
-  reason: string
-) {
-  const logRelative = '_Systems/sync-conflicts.md';
-  const fullPath = resolveVaultPath(vaultRoot, logRelative);
-  
-  const timestamp = new Date().toISOString();
-  let appendStr = `\n\n### 🔴 Conflict: ${resourceName} - ${timestamp}\n`;
-  appendStr += `**Reason**: ${reason}\n`;
-  appendStr += `- **Vault value**: \`${JSON.stringify(localValue)}\`\n`;
-  appendStr += `- **Google value**: \`${JSON.stringify(googleValue)}\`\n`;
+  localValue: unknown,
+  googleValue: unknown,
+  reason: string,
+): Promise<void> {
+  const fullPath = resolveVaultPath(ctx.config.vaultResolved, CONFLICT_LOG);
+
+  const timestamp = ctx.now().toISOString();
+  let entry = `\n\n### 🔴 Conflict: ${resourceName} - ${timestamp}\n`;
+  entry += `**Reason**: ${reason}\n`;
+  entry += `- **Vault value**: \`${JSON.stringify(localValue)}\`\n`;
+  entry += `- **Google value**: \`${JSON.stringify(googleValue)}\`\n`;
 
   try {
-    const dir = path.dirname(fullPath);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.appendFile(fullPath, appendStr, 'utf-8');
-    console.log(`[Conflict Logged] ${resourceName} to ${logRelative}`);
-  } catch (err: any) {
-    console.error('Failed to write conflict log:', err);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.appendFile(fullPath, entry, 'utf-8');
+    ctx.log.info('Conflict logged', { resource: resourceName, log: CONFLICT_LOG });
+  } catch (err) {
+    ctx.fail('Could not write the conflict log', err, { resource: resourceName });
   }
 }
