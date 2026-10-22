@@ -31,7 +31,10 @@ test('renaming a note rewrites wikilinks and keeps heading and alias', async () 
   });
   const changed = await move(dir, 'Inbox/draft.md', 'Inbox/final.md');
   assert.equal(changed, 1);
-  assert.equal(await read(dir, 'Daily.md'), 'See [[final]], [[final#Plan]], [[final|the draft]] and [[final#Plan|plan]].');
+  assert.equal(
+    await read(dir, 'Daily.md'),
+    'See [[final]], [[final#Plan]], [[final|the draft]] and [[final#Plan|plan]].',
+  );
 });
 
 test('markdown links are rewritten too', async () => {
@@ -60,7 +63,11 @@ test('moving a note to another folder under the same name touches nothing', asyn
 
   assert.equal(await move(dir, 'Inbox/draft.md', 'Areas/draft.md'), 0);
   assert.equal(await read(dir, 'Daily.md'), original);
-  assert.equal((await fs.stat(path.join(dir, 'Daily.md'))).mtimeMs, before, 'file was rewritten although nothing changed');
+  assert.equal(
+    (await fs.stat(path.join(dir, 'Daily.md'))).mtimeMs,
+    before,
+    'file was rewritten although nothing changed',
+  );
 });
 
 test('bare-name links are left alone when another note shares the name', async () => {
@@ -72,7 +79,7 @@ test('bare-name links are left alone when another note shares the name', async (
   await move(dir, 'A/Index.md', 'A/Home.md');
   assert.equal(
     await read(dir, 'Hub.md'),
-    'Bare [[Index]], bare md [x](Index.md), qualified [[A/Home]] and [[B/Index]].'
+    'Bare [[Index]], bare md [x](Index.md), qualified [[A/Home]] and [[B/Index]].',
   );
 });
 

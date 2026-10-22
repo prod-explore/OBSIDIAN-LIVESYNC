@@ -60,7 +60,11 @@ export async function sweepCalendarArchive(ctx: SyncContext): Promise<void> {
 }
 
 /** The names in a folder that pass `keep`, or null when the folder is missing or cannot be read. */
-async function listEntries(ctx: SyncContext, relPath: string, keep: (entry: import('fs').Dirent) => boolean): Promise<string[] | null> {
+async function listEntries(
+  ctx: SyncContext,
+  relPath: string,
+  keep: (entry: import('fs').Dirent) => boolean,
+): Promise<string[] | null> {
   try {
     const entries = await fs.readdir(resolveVaultPath(ctx.config.vaultResolved, relPath), { withFileTypes: true });
     return entries.filter(keep).map((e) => e.name);

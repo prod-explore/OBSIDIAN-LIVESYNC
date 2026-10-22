@@ -7,11 +7,7 @@ import { resolveVaultPath } from './security.js';
  * Generates a timestamped filename to prevent collisions in the trash.
  * Returns the relative path of the trashed file (e.g., ".trash/2026-08-26...__Note.md").
  */
-export async function moveToTrash(
-  vaultRoot: string,
-  trashDir: string,
-  notePathRelative: string
-): Promise<string> {
+export async function moveToTrash(vaultRoot: string, trashDir: string, notePathRelative: string): Promise<string> {
   const fullPath = resolveVaultPath(vaultRoot, notePathRelative);
   const trashRoot = resolveVaultPath(vaultRoot, trashDir);
 

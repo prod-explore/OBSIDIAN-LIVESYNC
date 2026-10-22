@@ -29,7 +29,7 @@ export function registerGetPath(server: McpServer, { config }: ToolContext): voi
         .describe(
           'Path relative to the vault root. ' +
             'Empty string = vault root. ' +
-            'e.g. "Folder/My Note.md" to read a note, "Folder" to list a directory.'
+            'e.g. "Folder/My Note.md" to read a note, "Folder" to list a directory.',
         ),
     },
     async ({ path: inputPath }) => {
@@ -71,6 +71,6 @@ export function registerGetPath(server: McpServer, { config }: ToolContext): voi
         // surfaced as tool errors rather than silently swallowed.
         return fail(`Error accessing path: ${errorMessage(err)}`);
       }
-    }
+    },
   );
 }

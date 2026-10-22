@@ -33,7 +33,14 @@ test('a clean cycle saves the state and reports success', async () => {
   const tasks = fakeTasks();
   const now = () => new Date('2026-06-01T12:00:00.000Z');
 
-  const result = await runCycle({ config, stateManager, statusFile, log, clients: { calendar: fakeCalendar().client, tasks: tasks.client }, now });
+  const result = await runCycle({
+    config,
+    stateManager,
+    statusFile,
+    log,
+    clients: { calendar: fakeCalendar().client, tasks: tasks.client },
+    now,
+  });
 
   assert.equal(result.ok, true);
   assert.equal(tasks.calls.tasks.insert.length, 1);
@@ -49,11 +56,28 @@ test('a clean cycle saves the state and reports success', async () => {
 test('a Google error is counted, the cycle is not a success, and the last success is remembered', async () => {
   const { config, log, statusFile, stateManager } = await setup();
   const earlier = new Date('2026-06-01T12:00:00.000Z');
-  await runCycle({ config, stateManager, statusFile, log, clients: { calendar: fakeCalendar().client, tasks: fakeTasks().client }, now: () => earlier });
+  await runCycle({
+    config,
+    stateManager,
+    statusFile,
+    log,
+    clients: { calendar: fakeCalendar().client, tasks: fakeTasks().client },
+    now: () => earlier,
+  });
 
-  const failing = fakeTasks({}, { list: () => { throw apiError(500, 'backend error'); } });
+  const failing = fakeTasks(
+    {},
+    {
+      list: () => {
+        throw apiError(500, 'backend error');
+      },
+    },
+  );
   const result = await runCycle({
-    config, stateManager, statusFile, log,
+    config,
+    stateManager,
+    statusFile,
+    log,
     clients: { calendar: fakeCalendar().client, tasks: failing.client },
     now: () => new Date('2026-06-01T12:05:00.000Z'),
   });
@@ -61,15 +85,28 @@ test('a Google error is counted, the cycle is not a success, and the last succes
   assert.equal(result.ok, false);
   const status = await readStatus(statusFile);
   assert.equal(status?.errors, 1);
+  assert.match(
+    status?.lastError ?? '',
+    /Could not pull task list L1: backend error/,
+    'the first error is in the status, so the health check can quote it',
+  );
   assert.equal(status?.lastSuccessAt, earlier.toISOString(), 'the last success is still the earlier one');
   assert.equal(status?.lastAttemptAt, '2026-06-01T12:05:00.000Z');
 });
 
 test('a failure that stops the cycle is written down and logged, and does not throw', async () => {
   const { config, log, lines, statusFile, stateManager } = await setup();
-  const broken = Object.assign(Object.create(stateManager), { save: () => Promise.reject(new Error('disk full')) }) as StateManager;
+  const broken = Object.assign(Object.create(stateManager), {
+    save: () => Promise.reject(new Error('disk full')),
+  }) as StateManager;
 
-  const result = await runCycle({ config, stateManager: broken, statusFile, log, clients: { calendar: fakeCalendar().client, tasks: fakeTasks().client } });
+  const result = await runCycle({
+    config,
+    stateManager: broken,
+    statusFile,
+    log,
+    clients: { calendar: fakeCalendar().client, tasks: fakeTasks().client },
+  });
 
   assert.equal(result.ok, false);
   const status = await readStatus(statusFile);
@@ -82,7 +119,13 @@ test('a note that needs fixing is listed in the status, and the cycle still coun
   const { config, log, statusFile, stateManager } = await setup();
   await writeNote(config, '{Tasks}/Bad.md', { title: 'Bad', status: 'needsAction', due: 'someday' });
 
-  const result = await runCycle({ config, stateManager, statusFile, log, clients: { calendar: fakeCalendar().client, tasks: fakeTasks().client } });
+  const result = await runCycle({
+    config,
+    stateManager,
+    statusFile,
+    log,
+    clients: { calendar: fakeCalendar().client, tasks: fakeTasks().client },
+  });
 
   assert.equal(result.ok, true);
   const status = await readStatus(statusFile);
@@ -91,11 +134,30 @@ test('a note that needs fixing is listed in the status, and the cycle still coun
 
 test('cancelled notes past their retention are removed as part of the cycle', async () => {
   const { config, log, statusFile, stateManager } = await setup();
-  const fm = { type: 'task', google_id: 'g1', tasklist_id: 'L1', title: 'Gone', status: 'cancelled', updated: '2026-01-01T00:00:00.000Z', source: 'google' };
-  await writeNote(config, '04-Archive/{Tasks}/Gone.md', { ...fm, sync_hash: computeSyncHash(fm), synced_at: '2026-01-01T00:00:00.000Z' });
+  const fm = {
+    type: 'task',
+    google_id: 'g1',
+    tasklist_id: 'L1',
+    title: 'Gone',
+    status: 'cancelled',
+    updated: '2026-01-01T00:00:00.000Z',
+    source: 'google',
+  };
+  await writeNote(config, '04-Archive/{Tasks}/Gone.md', {
+    ...fm,
+    sync_hash: computeSyncHash(fm),
+    synced_at: '2026-01-01T00:00:00.000Z',
+  });
   const now = () => new Date('2026-06-01T12:00:00.000Z');
 
-  await runCycle({ config, stateManager, statusFile, log, clients: { calendar: fakeCalendar().client, tasks: fakeTasks().client }, now });
+  await runCycle({
+    config,
+    stateManager,
+    statusFile,
+    log,
+    clients: { calendar: fakeCalendar().client, tasks: fakeTasks().client },
+    now,
+  });
 
   assert.equal(await exists(config, '04-Archive/{Tasks}/Gone.md'), false);
   assert.equal((await readStatus(statusFile))?.removedCancelled, 1);
@@ -103,7 +165,13 @@ test('cancelled notes past their retention are removed as part of the cycle', as
 
 test('the log says how the cycle went', async () => {
   const { config, log, lines, statusFile, stateManager } = await setup();
-  await runCycle({ config, stateManager, statusFile, log, clients: { calendar: fakeCalendar().client, tasks: fakeTasks().client } });
+  await runCycle({
+    config,
+    stateManager,
+    statusFile,
+    log,
+    clients: { calendar: fakeCalendar().client, tasks: fakeTasks().client },
+  });
   const finished = lines.map((l) => JSON.parse(l)).find((e) => e.msg === 'Sync cycle finished');
   assert.equal(finished.level, 'info');
   assert.equal(finished.errors, 0);

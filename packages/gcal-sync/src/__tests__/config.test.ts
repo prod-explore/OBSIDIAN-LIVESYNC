@@ -9,7 +9,17 @@ const BASE = {
   GOOGLE_REFRESH_TOKEN: 'refresh',
 };
 
-const KEYS = ['VAULT_PATH', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN', 'CALENDAR_IDS', 'TASKLIST_IDS', 'POLL_INTERVAL_MINUTES', 'ALLOW_MASS_DELETE', 'CANCELLED_RETENTION_DAYS'];
+const KEYS = [
+  'VAULT_PATH',
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
+  'GOOGLE_REFRESH_TOKEN',
+  'CALENDAR_IDS',
+  'TASKLIST_IDS',
+  'POLL_INTERVAL_MINUTES',
+  'ALLOW_MASS_DELETE',
+  'CANCELLED_RETENTION_DAYS',
+];
 
 /** Runs fn with exactly BASE + env set (everything else this config reads is unset), then restores the real environment. */
 function withEnv<T>(env: Record<string, string>, fn: () => T, without: string[] = []): T {
@@ -20,7 +30,10 @@ function withEnv<T>(env: Record<string, string>, fn: () => T, without: string[] 
   try {
     return fn();
   } finally {
-    for (const k of KEYS) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
   }
 }
 
@@ -55,13 +68,18 @@ test('the poll interval must be a whole number of minutes from 1 to 59', () => {
 
 test('mass deletion is only enabled by the exact value "true"', () => {
   assert.equal(withEnv({ ALLOW_MASS_DELETE: 'true' }, loadConfig).allowMassDelete, true);
-  for (const v of ['1', 'yes', 'TRUE', '']) assert.equal(withEnv({ ALLOW_MASS_DELETE: v }, loadConfig).allowMassDelete, false, v);
+  for (const v of ['1', 'yes', 'TRUE', ''])
+    assert.equal(withEnv({ ALLOW_MASS_DELETE: v }, loadConfig).allowMassDelete, false, v);
 });
 
 test('cancelled notes are kept 30 days by default; 0 keeps them for ever; anything else must be a whole number of days', () => {
   assert.equal(withEnv({ CANCELLED_RETENTION_DAYS: '7' }, loadConfig).cancelledRetentionDays, 7);
   assert.equal(withEnv({ CANCELLED_RETENTION_DAYS: '0' }, loadConfig).cancelledRetentionDays, 0);
-  assert.equal(withEnv({ CANCELLED_RETENTION_DAYS: '' }, loadConfig).cancelledRetentionDays, 30, 'an empty value from compose means "not set"');
+  assert.equal(
+    withEnv({ CANCELLED_RETENTION_DAYS: '' }, loadConfig).cancelledRetentionDays,
+    30,
+    'an empty value from compose means "not set"',
+  );
   for (const bad of ['-1', '1.5', 'week', '99999']) {
     assert.throws(() => withEnv({ CANCELLED_RETENTION_DAYS: bad }, loadConfig), /CANCELLED_RETENTION_DAYS/, bad);
   }

@@ -48,7 +48,11 @@ export function remindersPayload(value: unknown): calendar_v3.Schema$Event['remi
 }
 
 /** Creates or updates the event on Google, then moves the note to the path its date and title call for. */
-async function pushEventNote(ctx: SyncContext, entry: ScannedNote<EventNote>, isNew: boolean): Promise<PushOutcome | undefined> {
+async function pushEventNote(
+  ctx: SyncContext,
+  entry: ScannedNote<EventNote>,
+  isNew: boolean,
+): Promise<PushOutcome | undefined> {
   const { calendar, config, state } = ctx;
   const note: EventNote = { ...entry.note };
 
@@ -111,7 +115,12 @@ async function pushEventNote(ctx: SyncContext, entry: ScannedNote<EventNote>, is
       // reschedule that ingest processed first). If the file is gone, the move is a no-op.
       try {
         await fs.access(entry.fullPath);
-        const verb = !isArchivedPath(currentRelative) && isArchivedPath(idealRelative) ? 'Archived' : isArchivedPath(currentRelative) && !isArchivedPath(idealRelative) ? 'Unarchived' : 'Relocated';
+        const verb =
+          !isArchivedPath(currentRelative) && isArchivedPath(idealRelative)
+            ? 'Archived'
+            : isArchivedPath(currentRelative) && !isArchivedPath(idealRelative)
+              ? 'Unarchived'
+              : 'Relocated';
         await renameAndRefactorLinks(ctx, currentRelative, idealRelative);
         ctx.log.info(`${verb} event`, { from: currentRelative, to: idealRelative });
       } catch (err) {

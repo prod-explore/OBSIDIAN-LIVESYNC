@@ -5,7 +5,17 @@ import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { computeSyncHash } from '../sync/hash.js';
-import { emptyState, exists, fakeCalendar, fakeTasks, makeVault, push, readNote, removeVaults, writeNote } from './fakes.js';
+import {
+  emptyState,
+  exists,
+  fakeCalendar,
+  fakeTasks,
+  makeVault,
+  push,
+  readNote,
+  removeVaults,
+  writeNote,
+} from './fakes.js';
 
 after(removeVaults);
 
@@ -22,10 +32,17 @@ test('a due that is not a date skips that note, says why, and does not stop the 
 
   const ctx = await push(config, emptyState(), fakeCalendar().client, tasks.client);
 
-  assert.deepEqual(tasks.calls.tasks.insert.map((c) => c.requestBody.title), ['Good']);
+  assert.deepEqual(
+    tasks.calls.tasks.insert.map((c) => c.requestBody.title),
+    ['Good'],
+  );
   assert.equal(ctx.report.errors, 0, 'a note that needs fixing is not a failed cycle');
   assert.match(ctx.report.problems.get('{Tasks}/Bad.md') ?? '', /due "tomorrow" is not a date/);
-  assert.equal((await readNote(config, '{Tasks}/Bad.md')).frontmatter.due, 'tomorrow', 'the note is left exactly as it was');
+  assert.equal(
+    (await readNote(config, '{Tasks}/Bad.md')).frontmatter.due,
+    'tomorrow',
+    'the note is left exactly as it was',
+  );
 });
 
 test('a note that cannot be pushed is still a note: its task is not deleted on Google', async () => {
@@ -52,7 +69,11 @@ test('a due written as an unquoted date (YAML reads a Date) is pushed as that da
 
 test('a google_id the YAML parser read as a number still matches the manifest', async () => {
   const config = await makeVault();
-  await rawNote(config, '{Tasks}/Numeric.md', `---\ntitle: Numeric\nstatus: needsAction\ngoogle_id: 1234567890\ntasklist_id: L1\nsync_hash: ${computeSyncHash({ title: 'Numeric', status: 'needsAction' })}\n---\n`);
+  await rawNote(
+    config,
+    '{Tasks}/Numeric.md',
+    `---\ntitle: Numeric\nstatus: needsAction\ngoogle_id: 1234567890\ntasklist_id: L1\nsync_hash: ${computeSyncHash({ title: 'Numeric', status: 'needsAction' })}\n---\n`,
+  );
   const tasks = fakeTasks();
 
   await push(config, { ...emptyState(), knownTaskIds: { L1: ['1234567890'] } }, fakeCalendar().client, tasks.client);
@@ -64,7 +85,13 @@ test('a google_id the YAML parser read as a number still matches the manifest', 
 test('"cancelled" is not sent to Google Tasks, which has no such status; the rest of the edit is', async () => {
   const config = await makeVault();
   const fm = { title: 'Old', status: 'needsAction', google_id: 'g1', tasklist_id: 'L1', source: 'google' };
-  await writeNote(config, '{Tasks}/Old.md', { ...fm, sync_hash: computeSyncHash(fm), synced_at: '2026-02-01T09:00:00.000Z', title: 'Old, dropped', status: 'cancelled' });
+  await writeNote(config, '{Tasks}/Old.md', {
+    ...fm,
+    sync_hash: computeSyncHash(fm),
+    synced_at: '2026-02-01T09:00:00.000Z',
+    title: 'Old, dropped',
+    status: 'cancelled',
+  });
   const tasks = fakeTasks();
 
   await push(config, { ...emptyState(), knownTaskIds: { L1: ['g1'] } }, fakeCalendar().client, tasks.client);
@@ -92,9 +119,17 @@ test('a note with broken YAML is reported, the others are pushed, and nothing is
   await writeNote(config, '{Tasks}/Fine.md', { title: 'Fine', status: 'needsAction' });
   const tasks = fakeTasks();
 
-  const ctx = await push(config, { ...emptyState(), knownTaskIds: { L1: ['whose-note-is-broken'] } }, fakeCalendar().client, tasks.client);
+  const ctx = await push(
+    config,
+    { ...emptyState(), knownTaskIds: { L1: ['whose-note-is-broken'] } },
+    fakeCalendar().client,
+    tasks.client,
+  );
 
-  assert.deepEqual(tasks.calls.tasks.insert.map((c) => c.requestBody.title), ['Fine']);
+  assert.deepEqual(
+    tasks.calls.tasks.insert.map((c) => c.requestBody.title),
+    ['Fine'],
+  );
   assert.match(ctx.report.problems.get('{Tasks}/Broken.md') ?? '', /not valid YAML/);
   assert.deepEqual(tasks.calls.tasks.delete, [], 'the vault was not fully understood, so a missing id proves nothing');
 });

@@ -7,7 +7,8 @@ function truncateToBytes(text: string, maxBytes: number): string {
   if (Buffer.byteLength(text) <= maxBytes) return text;
   let out = '';
   let bytes = 0;
-  for (const char of text) { // by code point, so a character is never cut in half
+  for (const char of text) {
+    // by code point, so a character is never cut in half
     const size = Buffer.byteLength(char);
     if (bytes + size > maxBytes) break;
     out += char;

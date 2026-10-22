@@ -5,7 +5,19 @@ import * as path from 'path';
 import type { calendar_v3, tasks_v1 } from 'googleapis';
 import { computeSyncHash } from '../sync/hash.js';
 import {
-  apiError, dateFromNow, emptyState, exists, fakeCalendar, fakeTasks, ingest, listNotes, makeVault, readNote, removeVaults, today, writeNote,
+  apiError,
+  dateFromNow,
+  emptyState,
+  exists,
+  fakeCalendar,
+  fakeTasks,
+  ingest,
+  listNotes,
+  makeVault,
+  readNote,
+  removeVaults,
+  today,
+  writeNote,
   type Call,
 } from './fakes.js';
 
@@ -26,7 +38,9 @@ const event = (over: calendar_v3.Schema$Event = {}): calendar_v3.Schema$Event =>
   ...over,
 });
 
-const eventsPage = (items: calendar_v3.Schema$Event[], nextSyncToken = 'tok-next') => () => ({ data: { items, nextSyncToken } });
+const eventsPage =
+  (items: calendar_v3.Schema$Event[], nextSyncToken = 'tok-next') =>
+  () => ({ data: { items, nextSyncToken } });
 
 // ── calendar ────────────────────────────────────────────────────────────────
 
@@ -34,9 +48,15 @@ test('a new Google event becomes a note at its dated path, with Google data in t
   const config = await makeVault();
   const state = emptyState();
   const cal = fakeCalendar({
-    list: eventsPage([
-      event({ description: 'bring wine', reminders: { useDefault: false, overrides: [{ minutes: 10 }, { minutes: 60 }, { minutes: 1440 }] } }),
-    ], 'tok1'),
+    list: eventsPage(
+      [
+        event({
+          description: 'bring wine',
+          reminders: { useDefault: false, overrides: [{ minutes: 10 }, { minutes: 60 }, { minutes: 1440 }] },
+        }),
+      ],
+      'tok1',
+    ),
   });
 
   await ingest(config, state, cal.client, fakeTasks().client);
@@ -71,7 +91,11 @@ test('an all-day event gets 0000 in its name and a plain date', async () => {
 
 test('an event whose month is over goes straight to the archive', async () => {
   const config = await makeVault();
-  const cal = fakeCalendar({ list: eventsPage([event({ summary: 'Old', start: { dateTime: '2020-01-15T09:00:00Z' }, end: { dateTime: '2020-01-15T10:00:00Z' } })]) });
+  const cal = fakeCalendar({
+    list: eventsPage([
+      event({ summary: 'Old', start: { dateTime: '2020-01-15T09:00:00Z' }, end: { dateTime: '2020-01-15T10:00:00Z' } }),
+    ]),
+  });
 
   await ingest(config, emptyState(), cal.client, fakeTasks().client);
 
@@ -94,9 +118,10 @@ test('pages are followed until Google hands over the next sync token', async () 
   const config = await makeVault();
   const state = emptyState();
   const cal = fakeCalendar({
-    list: (p) => p.pageToken
-      ? { data: { items: [event({ id: 'second-id-0001', summary: 'Two' })], nextSyncToken: 'tok9' } }
-      : { data: { items: [event({ id: 'first-id-00001', summary: 'One' })], nextPageToken: 'p2' } },
+    list: (p) =>
+      p.pageToken
+        ? { data: { items: [event({ id: 'second-id-0001', summary: 'Two' })], nextSyncToken: 'tok9' } }
+        : { data: { items: [event({ id: 'first-id-00001', summary: 'One' })], nextPageToken: 'p2' } },
   });
 
   await ingest(config, state, cal.client, fakeTasks().client);
@@ -114,9 +139,16 @@ test('Google changing an event renames the note, keeps its private body and rewr
 
   const created = await readNote(config, EVENT_PATH);
   await writeNote(config, EVENT_PATH, created.frontmatter, 'my private notes');
-  await writeNote(config, 'Daily.md', {}, `See [[${EVENT_PATH.split('/').pop()!.replace('.md', '')}]] and [[${EVENT_PATH.split('/').pop()!.replace('.md', '')}|the dinner]].`);
+  await writeNote(
+    config,
+    'Daily.md',
+    {},
+    `See [[${EVENT_PATH.split('/').pop()!.replace('.md', '')}]] and [[${EVENT_PATH.split('/').pop()!.replace('.md', '')}|the dinner]].`,
+  );
 
-  const second = fakeCalendar({ list: eventsPage([event({ summary: 'Supper', updated: '2026-01-02T10:00:00.000Z' })]) });
+  const second = fakeCalendar({
+    list: eventsPage([event({ summary: 'Supper', updated: '2026-01-02T10:00:00.000Z' })]),
+  });
   await ingest(config, state, second.client, fakeTasks().client);
 
   const renamed = `{Calendar}/${MONTH}/${D}-1830-Supper-abcdefgh.md`;
@@ -125,7 +157,10 @@ test('Google changing an event renames the note, keeps its private body and rewr
   assert.equal(frontmatter.title, 'Supper');
   assert.equal(body.trim(), 'my private notes');
   const daily = (await readNote(config, 'Daily.md')).body;
-  assert.ok(daily.includes(`[[${D}-1830-Supper-abcdefgh]]`) && daily.includes(`[[${D}-1830-Supper-abcdefgh|the dinner]]`), daily);
+  assert.ok(
+    daily.includes(`[[${D}-1830-Supper-abcdefgh]]`) && daily.includes(`[[${D}-1830-Supper-abcdefgh|the dinner]]`),
+    daily,
+  );
 });
 
 test('a note edited in Obsidian after Google last changed the event is left for push', async () => {
@@ -151,7 +186,12 @@ test('when Google changed after the local edit, Google wins and the loser is wri
   await writeNote(config, EVENT_PATH, { ...note.frontmatter, title: 'Local title' });
 
   const later = new Date(Date.now() + 3_600_000).toISOString();
-  await ingest(config, state, fakeCalendar({ list: eventsPage([event({ summary: 'Google title', updated: later })]) }).client, fakeTasks().client);
+  await ingest(
+    config,
+    state,
+    fakeCalendar({ list: eventsPage([event({ summary: 'Google title', updated: later })]) }).client,
+    fakeTasks().client,
+  );
 
   const renamed = `{Calendar}/${MONTH}/${D}-1830-Google title-abcdefgh.md`;
   assert.equal((await readNote(config, renamed)).frontmatter.title, 'Google title');
@@ -175,7 +215,13 @@ test('a cancelled event we have is marked cancelled where it is', async () => {
   const state = emptyState();
   await ingest(config, state, fakeCalendar({ list: eventsPage([event()]) }).client, fakeTasks().client);
 
-  await ingest(config, state, fakeCalendar({ list: eventsPage([{ id: EVENT_ID, status: 'cancelled', updated: '2026-01-03T00:00:00.000Z' }]) }).client, fakeTasks().client);
+  await ingest(
+    config,
+    state,
+    fakeCalendar({ list: eventsPage([{ id: EVENT_ID, status: 'cancelled', updated: '2026-01-03T00:00:00.000Z' }]) })
+      .client,
+    fakeTasks().client,
+  );
 
   assert.deepEqual(await listNotes(config, '{Calendar}'), [EVENT_PATH]);
   assert.equal((await readNote(config, EVENT_PATH)).frontmatter.status, 'cancelled');
@@ -204,7 +250,11 @@ test('a token that keeps being refused is dropped, so the next cycle can start c
   const config = await makeVault();
   const state = emptyState();
   state.calendarTokens.primary = 'stale';
-  const cal = fakeCalendar({ list: () => { throw apiError(410); } });
+  const cal = fakeCalendar({
+    list: () => {
+      throw apiError(410);
+    },
+  });
 
   await ingest(config, state, cal.client, fakeTasks().client);
 
@@ -215,7 +265,11 @@ test('any other error leaves the sync token alone and does not throw', async () 
   const config = await makeVault();
   const state = emptyState();
   state.calendarTokens.primary = 'keep-me';
-  const cal = fakeCalendar({ list: () => { throw apiError(500, 'backend error'); } });
+  const cal = fakeCalendar({
+    list: () => {
+      throw apiError(500, 'backend error');
+    },
+  });
 
   await assert.doesNotReject(ingest(config, state, cal.client, fakeTasks().client));
 
@@ -225,16 +279,27 @@ test('any other error leaves the sync token alone and does not throw', async () 
 // ── tasks ───────────────────────────────────────────────────────────────────
 
 const task = (over: tasks_v1.Schema$Task = {}): tasks_v1.Schema$Task => ({
-  id: 'tasknumber1', title: 'Buy milk', status: 'needsAction', updated: '2026-02-01T08:00:00.000Z', ...over,
+  id: 'tasknumber1',
+  title: 'Buy milk',
+  status: 'needsAction',
+  updated: '2026-02-01T08:00:00.000Z',
+  ...over,
 });
 
-const taskPages = (byList: Record<string, tasks_v1.Schema$Task[]>) => (p: Call) => ({ data: { items: byList[p.tasklist ?? ''] ?? [] } });
+const taskPages = (byList: Record<string, tasks_v1.Schema$Task[]>) => (p: Call) => ({
+  data: { items: byList[p.tasklist ?? ''] ?? [] },
+});
 
 test('Google tasks become notes: the default list in {Tasks}, other lists in a folder named after them', async () => {
   const config = await makeVault();
   const state = emptyState();
   const tasks = fakeTasks(
-    { lists: [{ id: 'L1', title: 'My Tasks' }, { id: 'L2', title: 'Work/Home' }] },
+    {
+      lists: [
+        { id: 'L1', title: 'My Tasks' },
+        { id: 'L2', title: 'Work/Home' },
+      ],
+    },
     {
       list: taskPages({
         L1: [task({ due: '2031-05-04T00:00:00.000Z', notes: 'semi-skimmed' })],
@@ -253,13 +318,18 @@ test('Google tasks become notes: the default list in {Tasks}, other lists in a f
   const done = await readNote(config, `04-Archive/{Tasks}/Work-Home/${today()}-Ship it-othertas.md`);
   assert.equal(done.frontmatter.status, 'completed');
   assert.deepEqual(state.knownTaskIds, { L1: ['tasknumber1'], L2: ['othertask99'] });
-  assert.equal(state.tasksTokens.L1, '2026-02-01T08:00:00.001Z', 'the watermark is one millisecond past the newest task');
+  assert.equal(
+    state.tasksTokens.L1,
+    '2026-02-01T08:00:00.001Z',
+    'the watermark is one millisecond past the newest task',
+  );
 });
 
 test('completing a task in Google archives its note, un-completing brings it back', async () => {
   const config = await makeVault();
   const state = emptyState();
-  const run = (t: tasks_v1.Schema$Task) => ingest(config, state, fakeCalendar().client, fakeTasks({}, { list: taskPages({ L1: [t] }) }).client);
+  const run = (t: tasks_v1.Schema$Task) =>
+    ingest(config, state, fakeCalendar().client, fakeTasks({}, { list: taskPages({ L1: [t] }) }).client);
 
   await run(task());
   await run(task({ status: 'completed', updated: '2026-02-02T08:00:00.000Z' }));
@@ -272,7 +342,8 @@ test('completing a task in Google archives its note, un-completing brings it bac
 test('a task deleted in Google marks its note cancelled and archives it', async () => {
   const config = await makeVault();
   const state = emptyState();
-  const run = (t: tasks_v1.Schema$Task) => ingest(config, state, fakeCalendar().client, fakeTasks({}, { list: taskPages({ L1: [t] }) }).client);
+  const run = (t: tasks_v1.Schema$Task) =>
+    ingest(config, state, fakeCalendar().client, fakeTasks({}, { list: taskPages({ L1: [t] }) }).client);
 
   await run(task());
   await run(task({ deleted: true, updated: '2026-02-02T08:00:00.000Z' }));
@@ -297,14 +368,17 @@ test('one task that cannot be written does not block the others, and the waterma
   const config = await makeVault();
   const state = emptyState();
   await fs.mkdir(path.join(config.vaultResolved, `{Tasks}/${today()}-Bad-badtask1.md`), { recursive: true }); // a directory where the file should go
-  const tasks = fakeTasks({}, {
-    list: taskPages({
-      L1: [
-        task({ id: 'badtask1xxx', title: 'Bad', updated: '2026-03-02T00:00:00.000Z' }),
-        task({ id: 'goodtask1xx', title: 'Good', updated: '2026-03-01T00:00:00.000Z' }),
-      ],
-    }),
-  });
+  const tasks = fakeTasks(
+    {},
+    {
+      list: taskPages({
+        L1: [
+          task({ id: 'badtask1xxx', title: 'Bad', updated: '2026-03-02T00:00:00.000Z' }),
+          task({ id: 'goodtask1xx', title: 'Good', updated: '2026-03-01T00:00:00.000Z' }),
+        ],
+      }),
+    },
+  );
 
   await assert.doesNotReject(ingest(config, state, fakeCalendar().client, tasks.client));
 
@@ -333,7 +407,12 @@ test('a task list created in Google after the first cycle is picked up by the ne
   assert.deepEqual(await listNotes(config), []);
 
   const later = fakeTasks(
-    { lists: [{ id: 'L1', title: 'My Tasks' }, { id: 'L2', title: 'Holiday' }] },
+    {
+      lists: [
+        { id: 'L1', title: 'My Tasks' },
+        { id: 'L2', title: 'Holiday' },
+      ],
+    },
     { list: taskPages({ L2: [task({ id: 'holidaytask1', title: 'Pack' })] }) },
   );
   await ingest(config, state, fakeCalendar().client, later.client);

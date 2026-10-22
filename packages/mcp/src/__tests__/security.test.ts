@@ -69,7 +69,9 @@ test('resolveVaultPath blocks a symlinked folder that leads outside the vault', 
     assert.throws(() => resolveVaultPath(s.vault, 'link'), PathTraversalError);
     // Writing a NEW note through the link must be refused too.
     assert.throws(() => resolveVaultPath(s.vault, 'link/new.md'), PathTraversalError);
-  } finally { s.done(); }
+  } finally {
+    s.done();
+  }
 });
 
 test('resolveVaultPath blocks a symlinked file that leads outside the vault', () => {
@@ -77,7 +79,9 @@ test('resolveVaultPath blocks a symlinked file that leads outside the vault', ()
   try {
     fs.symlinkSync(path.join(s.outside, 'secret.md'), path.join(s.vault, 'Notes', 'innocent.md'));
     assert.throws(() => resolveVaultPath(s.vault, 'Notes/innocent.md'), PathTraversalError);
-  } finally { s.done(); }
+  } finally {
+    s.done();
+  }
 });
 
 test('resolveVaultPath blocks a dangling symlink (a write would create the target outside)', () => {
@@ -85,7 +89,9 @@ test('resolveVaultPath blocks a dangling symlink (a write would create the targe
   try {
     fs.symlinkSync(path.join(s.outside, 'not-there.md'), path.join(s.vault, 'dangling.md'));
     assert.throws(() => resolveVaultPath(s.vault, 'dangling.md'), PathTraversalError);
-  } finally { s.done(); }
+  } finally {
+    s.done();
+  }
 });
 
 test('resolveVaultPath blocks a link nested behind a link that stays inside', () => {
@@ -94,7 +100,9 @@ test('resolveVaultPath blocks a link nested behind a link that stays inside', ()
     fs.symlinkSync(s.outside, path.join(s.vault, 'Notes', 'out'));
     fs.symlinkSync(path.join(s.vault, 'Notes'), path.join(s.vault, 'alias'));
     assert.throws(() => resolveVaultPath(s.vault, 'alias/out/secret.md'), PathTraversalError);
-  } finally { s.done(); }
+  } finally {
+    s.done();
+  }
 });
 
 test('resolveVaultPath allows a symlink that stays inside the vault', () => {
@@ -102,7 +110,9 @@ test('resolveVaultPath allows a symlink that stays inside the vault', () => {
   try {
     fs.symlinkSync(path.join(s.vault, 'Notes'), path.join(s.vault, 'alias'));
     assert.equal(resolveVaultPath(s.vault, 'alias/ok.md'), path.join(s.vault, 'alias', 'ok.md'));
-  } finally { s.done(); }
+  } finally {
+    s.done();
+  }
 });
 
 test('resolveVaultPath works when the vault root itself is a symlink', () => {
@@ -112,12 +122,16 @@ test('resolveVaultPath works when the vault root itself is a symlink', () => {
     fs.symlinkSync(s.vault, rootLink);
     assert.equal(resolveVaultPath(rootLink, 'Notes/ok.md'), path.join(rootLink, 'Notes', 'ok.md'));
     assert.throws(() => resolveVaultPath(rootLink, '../outside/secret.md'), PathTraversalError);
-  } finally { s.done(); }
+  } finally {
+    s.done();
+  }
 });
 
 test('resolveVaultPath allows paths that do not exist yet inside a real vault', () => {
   const s = makeSandbox();
   try {
     assert.equal(resolveVaultPath(s.vault, 'New/Deep/note.md'), path.join(s.vault, 'New', 'Deep', 'note.md'));
-  } finally { s.done(); }
+  } finally {
+    s.done();
+  }
 });

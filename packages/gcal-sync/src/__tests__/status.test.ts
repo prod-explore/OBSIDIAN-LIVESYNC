@@ -41,7 +41,10 @@ test('unhealthy once the last success is older than three polls plus a margin, a
   const limit = staleAfterMinutes(5);
   assert.equal(limit, 20);
   assert.equal(evaluateHealth(status({ lastSuccessAt: minutesAgo(limit) }), NOW).healthy, true);
-  const stale = evaluateHealth(status({ lastSuccessAt: minutesAgo(limit + 1), errors: 1, lastError: 'invalid_grant' }), NOW);
+  const stale = evaluateHealth(
+    status({ lastSuccessAt: minutesAgo(limit + 1), errors: 1, lastError: 'invalid_grant' }),
+    NOW,
+  );
   assert.equal(stale.healthy, false);
   assert.match(stale.reason, /21 minutes ago/);
   assert.match(stale.reason, /invalid_grant/);

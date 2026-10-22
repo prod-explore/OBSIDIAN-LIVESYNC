@@ -11,7 +11,14 @@ type Result = { content: { type: string; text: string }[]; isError?: boolean };
 
 async function search(vault: string, query: string): Promise<string> {
   let handler: ((args: { query: string }) => Promise<Result>) | undefined;
-  registerSearchNotes({ tool: (_n: string, _d: string, _s: unknown, h: typeof handler) => { handler = h; } } as unknown as McpServer, { config: { vaultResolved: vault } as unknown as Config });
+  registerSearchNotes(
+    {
+      tool: (_n: string, _d: string, _s: unknown, h: typeof handler) => {
+        handler = h;
+      },
+    } as unknown as McpServer,
+    { config: { vaultResolved: vault } as unknown as Config },
+  );
   return (await handler!({ query })).content[0].text;
 }
 

@@ -18,7 +18,11 @@ export function saveNote(fullPath: string, note: NoteFields, body: string): Prom
  * the insert and the real id replaces it after, so a crash in between is recognisable on the next cycle (see
  * `pushKind`). If the insert itself fails the marker is taken off again, so the next cycle simply tries again.
  */
-export async function insertWithMarker<T>(entry: ScannedNote<NoteFields>, note: NoteFields, insert: () => Promise<T>): Promise<T> {
+export async function insertWithMarker<T>(
+  entry: ScannedNote<NoteFields>,
+  note: NoteFields,
+  insert: () => Promise<T>,
+): Promise<T> {
   note.push_pending = true;
   await saveNote(entry.fullPath, note, entry.body);
   try {

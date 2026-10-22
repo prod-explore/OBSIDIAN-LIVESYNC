@@ -8,13 +8,13 @@
 x-logging: &default-logging
   driver: json-file
   options:
-    max-size: "10m"
-    max-file: "3"
+    max-size: '10m'
+    max-file: '3'
 
 services:
   couchdb:
-    # Consider pinning a tag you have tested (couchdb:3.x) so a major upgrade is a decision, not a pull.
-    image: couchdb:latest
+    # The major version is pinned: 3.x updates arrive with a pull, a move to 4 is a decision. Dependabot proposes bumps.
+    image: couchdb:3
     container_name: obsidian-couchdb
     restart: unless-stopped
     environment:
@@ -28,10 +28,13 @@ services:
     logging: *default-logging
 
   obsidian-headless:
+    # Still "latest" on purpose: the right tag is the one already running (`docker compose images` shows it, a
+    # version like 1.x.y-ls###), and pinning a different one would silently up- or downgrade Obsidian itself.
+    # Replace "latest" with that tag once; from then on Dependabot proposes the updates.
     image: lscr.io/linuxserver/obsidian:latest
     container_name: obsidian-headless
     restart: unless-stopped
-    shm_size: "1gb"
+    shm_size: '1gb'
     # Electron needs this; it is the one container here that runs without the default seccomp profile.
     security_opt:
       - seccomp:unconfined
@@ -62,8 +65,9 @@ services:
       - MCP_API_KEY=${MCP_API_KEY:?set MCP_API_KEY in .env}
       - MCP_INSTRUCTIONS=${MCP_INSTRUCTIONS:-}
       - VAULT_PATH=/vault/vault-mcp
+      - LOG_LEVEL=${LOG_LEVEL:-info}
     # Same uid as headless Obsidian, or it cannot write into folders this server creates.
-    user: "1000:1000"
+    user: '1000:1000'
     read_only: true
     tmpfs:
       - /tmp
@@ -96,9 +100,11 @@ services:
       - TASKLIST_IDS=${TASKLIST_IDS:-@default}
       - POLL_INTERVAL_MINUTES=${POLL_INTERVAL_MINUTES:-5}
       - ALLOW_MASS_DELETE=${ALLOW_MASS_DELETE:-false}
+      - CANCELLED_RETENTION_DAYS=${CANCELLED_RETENTION_DAYS:-30}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
       - DATA_PATH=/data
       - TZ=Europe/Warsaw
-    user: "1000:1000"
+    user: '1000:1000'
     read_only: true
     tmpfs:
       - /tmp

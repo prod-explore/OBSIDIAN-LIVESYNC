@@ -23,7 +23,10 @@ export default tseslint.config(
     rules: {
       // The point of the typed notes: nothing is "any".
       '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
+      ],
 
       // A promise nobody awaits is an error nobody sees.
       '@typescript-eslint/no-floating-promises': 'error',

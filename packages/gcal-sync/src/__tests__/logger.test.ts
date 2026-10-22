@@ -31,7 +31,10 @@ test('the level filters what is written', () => {
   log.info('i');
   log.warn('w');
   log.error('e');
-  assert.deepEqual(lines.map((l) => l.level), ['warn', 'error']);
+  assert.deepEqual(
+    lines.map((l) => l.level),
+    ['warn', 'error'],
+  );
   const silent = capture({ level: 'silent' });
   silent.log.error('nothing');
   assert.deepEqual(silent.lines, []);
@@ -56,13 +59,19 @@ test('warnOnce says it once per key', () => {
   log.warnOnce('k', 'first');
   log.warnOnce('k', 'second');
   log.warnOnce('other', 'third');
-  assert.deepEqual(lines.map((l) => JSON.parse(l.line).msg), ['first', 'third']);
+  assert.deepEqual(
+    lines.map((l) => JSON.parse(l.line).msg),
+    ['first', 'third'],
+  );
 });
 
 test('a token in a URL never reaches the log, in either format', () => {
   for (const format of ['json', 'text'] as const) {
     const { log, lines } = capture({ format });
-    log.info('GET /mcp?token=s3cret&x=1', { url: 'https://example.org/mcp?x=1&token=s3cret', error: new Error('failed for /mcp?token=s3cret') });
+    log.info('GET /mcp?token=s3cret&x=1', {
+      url: 'https://example.org/mcp?x=1&token=s3cret',
+      error: new Error('failed for /mcp?token=s3cret'),
+    });
     assert.ok(!lines[0].line.includes('s3cret'), `${format}: ${lines[0].line}`);
     assert.match(lines[0].line, /token=\[redacted\]/);
   }
@@ -72,7 +81,10 @@ test('fields named like a secret are masked, and bearer tokens are redacted', ()
   const { log, lines } = capture();
   log.info('x', { refreshToken: 'abc', clientSecret: 'def', authorization: 'ghi', other: 'visible' });
   const entry = JSON.parse(lines[0].line);
-  assert.deepEqual([entry.refreshToken, entry.clientSecret, entry.authorization, entry.other], ['[redacted]', '[redacted]', '[redacted]', 'visible']);
+  assert.deepEqual(
+    [entry.refreshToken, entry.clientSecret, entry.authorization, entry.other],
+    ['[redacted]', '[redacted]', '[redacted]', 'visible'],
+  );
   assert.equal(redact('Authorization: Bearer abc.def-123'), 'Authorization: Bearer [redacted]');
   assert.equal(redact('nothing to hide'), 'nothing to hide');
 });
@@ -88,5 +100,8 @@ test('LOG_LEVEL and LOG_FORMAT come from the environment; a bad level falls back
   } finally {
     process.stdout.write = originalWrite;
   }
-  assert.deepEqual(lines.map((l) => JSON.parse(l).msg), ['shown', 'shown too']);
+  assert.deepEqual(
+    lines.map((l) => JSON.parse(l).msg),
+    ['shown', 'shown too'],
+  );
 });

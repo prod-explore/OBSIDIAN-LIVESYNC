@@ -33,9 +33,15 @@ export function loadConfig(): Config {
 
   const calendarIdsRaw = process.env.CALENDAR_IDS || 'primary';
   const tasklistIdsRaw = process.env.TASKLIST_IDS || '@default';
-  
-  const calendarIds = calendarIdsRaw.split(',').map((id) => id.trim()).filter(Boolean);
-  const tasklistIds = tasklistIdsRaw.split(',').map((id) => id.trim()).filter(Boolean);
+
+  const calendarIds = calendarIdsRaw
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const tasklistIds = tasklistIdsRaw
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
 
   // The schedule is a cron expression (*/n * * * *), which only allows 1-59.
   const pollIntervalMinutes = Number(process.env.POLL_INTERVAL_MINUTES || '5');

@@ -90,8 +90,11 @@ test('handles multiple past months in one pass', async () => {
 
   await sweepCalendarArchive(vault);
 
-  await assert.doesNotReject(fs.access(path.join(vault, '04-Archive/{Calendar}/2019-06/2019-06-01-0900-A-11111111.md')));
-  await assert.doesNotReject(fs.access(path.join(vault, '04-Archive/{Calendar}/2020-12/2020-12-25-0000-B-22222222.md')));
+  await assert.doesNotReject(
+    fs.access(path.join(vault, '04-Archive/{Calendar}/2019-06/2019-06-01-0900-A-11111111.md')),
+  );
+  await assert.doesNotReject(
+    fs.access(path.join(vault, '04-Archive/{Calendar}/2020-12/2020-12-25-0000-B-22222222.md')),
+  );
   await fs.rm(vault, { recursive: true, force: true });
 });
-

@@ -39,9 +39,15 @@ export async function sweepCancelled(ctx: SyncContext): Promise<number> {
   const now = ctx.now().getTime();
   let removed = 0;
 
-  const candidates: Array<{ entry: ScannedNote<NoteFields>; manifest: SyncState['knownTaskIds']; noun: 'task' | 'event' }> = [];
-  for (const entry of (await scanTasks(ctx)).notes) candidates.push({ entry, manifest: ctx.state.knownTaskIds, noun: 'task' });
-  for (const entry of (await scanEvents(ctx)).notes) candidates.push({ entry, manifest: ctx.state.knownEventIds, noun: 'event' });
+  const candidates: Array<{
+    entry: ScannedNote<NoteFields>;
+    manifest: SyncState['knownTaskIds'];
+    noun: 'task' | 'event';
+  }> = [];
+  for (const entry of (await scanTasks(ctx)).notes)
+    candidates.push({ entry, manifest: ctx.state.knownTaskIds, noun: 'task' });
+  for (const entry of (await scanEvents(ctx)).notes)
+    candidates.push({ entry, manifest: ctx.state.knownEventIds, noun: 'event' });
 
   for (const { entry, manifest, noun } of candidates) {
     if (!isExpired(entry, now, days)) continue;

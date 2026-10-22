@@ -15,7 +15,8 @@ async function withDataDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   try {
     return await fn(dir);
   } finally {
-    if (previous === undefined) delete process.env.DATA_PATH; else process.env.DATA_PATH = previous;
+    if (previous === undefined) delete process.env.DATA_PATH;
+    else process.env.DATA_PATH = previous;
     await fs.rm(dir, { recursive: true, force: true });
   }
 }
@@ -30,7 +31,12 @@ test('a first run starts from an empty state', async () => {
 test('saved state loads back unchanged and leaves no temporary file', async () => {
   await withDataDir(async (dir) => {
     const manager = new StateManager();
-    const state = { calendarTokens: { primary: 'tok' }, tasksTokens: { '@default': '2026-09-01T00:00:00.000Z' }, knownTaskIds: { '@default': ['a', 'b'] }, knownEventIds: { primary: ['e1'] } };
+    const state = {
+      calendarTokens: { primary: 'tok' },
+      tasksTokens: { '@default': '2026-09-01T00:00:00.000Z' },
+      knownTaskIds: { '@default': ['a', 'b'] },
+      knownEventIds: { primary: ['e1'] },
+    };
     await manager.save(state);
     assert.deepEqual(await manager.load(), state);
     assert.deepEqual(await fs.readdir(dir), ['sync-state.json']);
@@ -64,7 +70,10 @@ test('a state file that cannot be read stops the cycle instead of pretending the
   await withDataDir(async (dir) => {
     // A directory where the file should be: readFile fails with EISDIR, not ENOENT.
     await fs.mkdir(path.join(dir, 'sync-state.json'));
-    await assert.rejects(() => new StateManager().load(), (err: NodeJS.ErrnoException) => err.code === 'EISDIR');
+    await assert.rejects(
+      () => new StateManager().load(),
+      (err: NodeJS.ErrnoException) => err.code === 'EISDIR',
+    );
   });
 });
 
@@ -72,6 +81,8 @@ test('a state that cannot be saved is an error, not a silent loss of progress', 
   await withDataDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'blocker'), 'a file where a folder is needed');
     const manager = new StateManager(quiet, path.join(dir, 'blocker', 'inside'));
-    await assert.rejects(() => manager.save({ calendarTokens: {}, tasksTokens: {}, knownTaskIds: {}, knownEventIds: {} }));
+    await assert.rejects(() =>
+      manager.save({ calendarTokens: {}, tasksTokens: {}, knownTaskIds: {}, knownEventIds: {} }),
+    );
   });
 });

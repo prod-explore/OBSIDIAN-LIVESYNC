@@ -23,11 +23,11 @@ export interface HashState extends Hashable {
  */
 export function computeSyncHash(note: Hashable): string {
   const payload = {
-    title:       note.title || '',
-    status:      note.status || '',
-    due:         note.due || '',
-    start:       note.start || '',
-    end:         note.end || '',
+    title: note.title || '',
+    status: note.status || '',
+    due: note.due || '',
+    start: note.start || '',
+    end: note.end || '',
     description: note.description || '',
   };
 

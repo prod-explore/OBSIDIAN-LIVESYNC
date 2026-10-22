@@ -87,7 +87,12 @@ export async function pushKind<N extends NoteFields>(ctx: SyncContext, kind: Not
   await deleteVanished(ctx, kind, present);
 }
 
-async function attempt<N extends NoteFields>(ctx: SyncContext, kind: NoteKind<N>, entry: ScannedNote<N>, isNew: boolean): Promise<PushOutcome | undefined> {
+async function attempt<N extends NoteFields>(
+  ctx: SyncContext,
+  kind: NoteKind<N>,
+  entry: ScannedNote<N>,
+  isNew: boolean,
+): Promise<PushOutcome | undefined> {
   try {
     return await kind.push(ctx, entry, isNew);
   } catch (err) {
@@ -97,7 +102,11 @@ async function attempt<N extends NoteFields>(ctx: SyncContext, kind: NoteKind<N>
 }
 
 /** Ids in the manifest that no longer have a note were deleted in the vault: delete them on Google too. */
-async function deleteVanished<N extends NoteFields>(ctx: SyncContext, kind: NoteKind<N>, present: Map<string, Set<string>>): Promise<void> {
+async function deleteVanished<N extends NoteFields>(
+  ctx: SyncContext,
+  kind: NoteKind<N>,
+  present: Map<string, Set<string>>,
+): Promise<void> {
   const manifest = kind.manifest(ctx.state);
 
   for (const [containerId, knownIds] of Object.entries(manifest)) {

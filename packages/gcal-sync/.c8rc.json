@@ -1,0 +1,10 @@
+{
+  "include": ["dist/**/*.js"],
+  "exclude": ["dist/__tests__/**", "dist/index.js", "dist/healthcheck.js", "dist/google/client.js"],
+  "reporter": ["text", "lcov"],
+  "check-coverage": true,
+  "lines": 90,
+  "statements": 90,
+  "functions": 90,
+  "branches": 78
+}

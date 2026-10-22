@@ -110,7 +110,12 @@ function commonFields(note: NoteFields, raw: RawFrontmatter): void {
   set(note, 'push_pending', raw.push_pending === true ? true : undefined);
 }
 
-function checkedStatus<S extends string>(note: RawFrontmatter, raw: RawFrontmatter, allowed: readonly S[], problems: string[]): void {
+function checkedStatus<S extends string>(
+  note: RawFrontmatter,
+  raw: RawFrontmatter,
+  allowed: readonly S[],
+  problems: string[],
+): void {
   if (isEmpty(raw.status)) {
     delete note.status;
     return;

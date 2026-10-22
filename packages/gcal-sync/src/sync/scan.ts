@@ -1,7 +1,15 @@
 import * as fs from 'fs/promises';
 import { errorMessage, isFileMissing } from '../errors.js';
 import { parseNote } from '../markdown/frontmatter.js';
-import { readEventNote, readTaskNote, type EventNote, type NoteFields, type RawFrontmatter, type Read, type TaskNote } from '../markdown/notes.js';
+import {
+  readEventNote,
+  readTaskNote,
+  type EventNote,
+  type NoteFields,
+  type RawFrontmatter,
+  type Read,
+  type TaskNote,
+} from '../markdown/notes.js';
 import { resolveVaultPath } from '../markdown/paths.js';
 import { ARCHIVE_PREFIX } from './archive.js';
 import type { SyncContext } from './context.js';
@@ -39,7 +47,11 @@ export interface Scan<N extends NoteFields> {
 /** Files that live beside the notes but are not notes. */
 const isNoteFile = (name: string) => name.endsWith('.md') && !name.startsWith('README');
 
-async function scanRoots<N extends NoteFields>(ctx: SyncContext, roots: string[], read: (raw: RawFrontmatter) => Read<N>): Promise<Scan<N>> {
+async function scanRoots<N extends NoteFields>(
+  ctx: SyncContext,
+  roots: string[],
+  read: (raw: RawFrontmatter) => Read<N>,
+): Promise<Scan<N>> {
   const notes: ScannedNote<N>[] = [];
   let complete = true;
 
@@ -111,7 +123,17 @@ async function readFile<N extends NoteFields>(
   }
 
   const { note, problems } = read(parsed.frontmatter);
-  return { relative, relFolder, file, fullPath, mtimeMs: stat.mtimeMs, raw: parsed.frontmatter, note, problems, body: parsed.body };
+  return {
+    relative,
+    relFolder,
+    file,
+    fullPath,
+    mtimeMs: stat.mtimeMs,
+    raw: parsed.frontmatter,
+    note,
+    problems,
+    body: parsed.body,
+  };
 }
 
 /** Every task note: the active folders first, then the archive mirror. */
@@ -131,7 +153,11 @@ export async function readEventFile(ctx: SyncContext, relative: string): Promise
   return readOne(ctx, relative, readEventNote);
 }
 
-async function readOne<N extends NoteFields>(ctx: SyncContext, relative: string, read: (raw: RawFrontmatter) => Read<N>): Promise<ScannedNote<N>> {
+async function readOne<N extends NoteFields>(
+  ctx: SyncContext,
+  relative: string,
+  read: (raw: RawFrontmatter) => Read<N>,
+): Promise<ScannedNote<N>> {
   const slash = relative.lastIndexOf('/');
   const fullPath = resolveVaultPath(ctx.config.vaultResolved, relative);
   const stat = await fs.stat(fullPath);
