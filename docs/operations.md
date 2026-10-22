@@ -68,5 +68,5 @@ make those settings identical on every device and on the headless instance.
   nginx's error log still prints the full request line when an upstream error happens, so prefer the `Authorization` header
   wherever the client allows it, and rotate `MCP_API_KEY` if a log leaves the machine.
 - **Settings.** `MCP_API_KEY` (required), `VAULT_PATH`, `PORT` (3000), `TRASH_DIR` (`.trash`), `SSE_SESSION_MAX_AGE_MS` (1 h),
-  `SSE_SWEEP_INTERVAL_MS` (5 min), `MCP_INSTRUCTIONS` (see `.env.example`).
+  `SSE_SWEEP_INTERVAL_MS` (5 min), `MCP_INSTRUCTIONS` (text sent to clients on connect; unset = none).
 - **Rebuild after an update.** `docker compose up -d --build obsidian-mcp obsidian-gcal-sync`.

@@ -6,7 +6,7 @@ import * as path from 'path';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { createApp } from '../server.js';
-import { resolveInstructions, DEFAULT_INSTRUCTIONS, type Config } from '../config.js';
+import { resolveInstructions, type Config } from '../config.js';
 
 const KEY = 'test-key-with-some-length-1234567890';
 let http: Server;
@@ -96,10 +96,9 @@ test('an authenticated MCP client can list the tools the README documents', asyn
   );
 });
 
-test('instructions default to the vault rules file and can be overridden or switched off', () => {
-  assert.equal(resolveInstructions({}), DEFAULT_INSTRUCTIONS);
-  assert.equal(resolveInstructions({ MCP_INSTRUCTIONS: '' }), DEFAULT_INSTRUCTIONS, 'empty = unset, so compose can pass it through');
-  assert.equal(resolveInstructions({ MCP_INSTRUCTIONS: 'Be brief.' }), 'Be brief.');
-  assert.equal(resolveInstructions({ MCP_INSTRUCTIONS: 'none' }), undefined);
-  assert.equal(resolveInstructions({ MCP_INSTRUCTIONS: ' None ' }), undefined);
+test('client instructions come from MCP_INSTRUCTIONS only; there is no built-in default', () => {
+  assert.equal(resolveInstructions({}), undefined);
+  assert.equal(resolveInstructions({ MCP_INSTRUCTIONS: '' }), undefined, 'empty = unset, so compose can pass it through');
+  assert.equal(resolveInstructions({ MCP_INSTRUCTIONS: '   ' }), undefined);
+  assert.equal(resolveInstructions({ MCP_INSTRUCTIONS: ' Read _Systems/AGENTS.md first. ' }), 'Read _Systems/AGENTS.md first.');
 });
