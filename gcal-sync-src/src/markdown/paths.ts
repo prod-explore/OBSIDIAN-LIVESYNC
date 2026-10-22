@@ -1,11 +1,29 @@
 import * as path from 'path';
 
+/** File names are limited to 255 bytes; the date, id and extension around a title take about 30 of them. */
+const MAX_TITLE_BYTES = 180;
+
+function truncateToBytes(text: string, maxBytes: number): string {
+  if (Buffer.byteLength(text) <= maxBytes) return text;
+  let out = '';
+  let bytes = 0;
+  for (const char of text) { // by code point, so a character is never cut in half
+    const size = Buffer.byteLength(char);
+    if (bytes + size > maxBytes) break;
+    out += char;
+    bytes += size;
+  }
+  return out;
+}
+
 /**
- * Sanitizes an event or task title into a safe filename.
- * Replaces characters that are illegal in Windows/Linux filesystems.
+ * Sanitizes an event or task title into a safe filename part: characters that are illegal in
+ * Windows/Linux filenames are replaced, and a very long title is cut so the whole name still fits.
+ * (The full title stays in the note's frontmatter.)
  */
 export function sanitizeTitle(title: string): string {
-  return title.replace(/[<>:"/\\|?*\x00-\x1F]/g, '-').trim() || 'Untitled';
+  const cleaned = title.replace(/[<>:"/\\|?*\x00-\x1F]/g, '-').trim();
+  return truncateToBytes(cleaned, MAX_TITLE_BYTES).trim() || 'Untitled';
 }
 
 /**

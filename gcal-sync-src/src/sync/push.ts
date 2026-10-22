@@ -5,10 +5,11 @@ import { Config } from '../config.js';
 import { SyncState } from './state.js';
 import { parseNote, serializeNote } from '../markdown/frontmatter.js';
 import { resolveVaultPath, sanitizeTitle } from '../markdown/paths.js';
-import { computeSyncHash } from './hash.js';
-import { ARCHIVE_PREFIX, isPastMonth } from './archive.js';
+import { computeSyncHash, isLocallyModified } from './hash.js';
+import { ARCHIVE_PREFIX, eventNotePath } from './archive.js';
 import { resolveTasklistId } from './tasklists.js';
 import { isMassDeletion } from './safety.js';
+import { renameAndRefactorLinks } from './refactor.js';
 
 // ---------------------------------------------------------------------------
 // Main push function
@@ -138,10 +139,7 @@ async function pushFolder(
     // ------------------------------------------------------------------
     const isNew = !frontmatter.google_id;
 
-    const currentHash = computeSyncHash(frontmatter);
-    const locallyModified = frontmatter.sync_hash
-      ? frontmatter.sync_hash !== currentHash
-      : (frontmatter.synced_at ? stat.mtimeMs > new Date(frontmatter.synced_at).getTime() + 2000 : false);
+    const locallyModified = isLocallyModified(frontmatter, stat.mtimeMs);
 
     let isMoved = false;
     if (folder === '{Tasks}' && !isNew) {
@@ -151,8 +149,8 @@ async function pushFolder(
       if (tasksIndex !== -1 && tasksIndex < folderParts.length - 1) {
         listName = folderParts[tasksIndex + 1];
       }
-      const targetListId = await resolveTasklistId(tasks, listName) || config.tasklistIds[0];
-      if (frontmatter.tasklist_id && frontmatter.tasklist_id !== targetListId) {
+      const targetListId = await resolveTasklistId(tasks, listName);
+      if (targetListId && frontmatter.tasklist_id && frontmatter.tasklist_id !== targetListId) {
         isMoved = true;
       }
     }
@@ -295,7 +293,10 @@ async function pushTaskNote(
     listName = folderParts[tasksIndex + 1];
   }
 
-  const targetListId = await resolveTasklistId(tasks, listName) || config.tasklistIds[0];
+  // No fallback to some other list when Google cannot be asked: filing the task in the wrong list now would
+  // only be undone (delete and re-create) by the next cycle. The error is logged by handleFile and retried.
+  const targetListId = await resolveTasklistId(tasks, listName);
+  if (!targetListId) throw new Error(`could not determine the Google task list for "${listName}"`);
 
   if (!isNew && frontmatter.google_id && frontmatter.tasklist_id && frontmatter.tasklist_id !== targetListId) {
     // The task was moved to a new list (subfolder) in Obsidian!
@@ -398,6 +399,19 @@ async function pushTaskNote(
 // Calendar event: create or update
 // ---------------------------------------------------------------------------
 
+/**
+ * A start/end value from the frontmatter as text: an RFC 3339 dateTime, or a plain date for an all-day event.
+ * Obsidian's date property writes `2031-05-04` unquoted and YAML reads that as a Date at midnight UTC, which
+ * is a day, not an instant, so it must not become a "00:00" event.
+ */
+function eventTimeString(value: unknown): string {
+  if (value instanceof Date) {
+    const iso = value.toISOString();
+    return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso;
+  }
+  return String(value);
+}
+
 async function pushCalendarNote(
   calendar: calendar_v3.Calendar,
   config: Config,
@@ -444,17 +458,10 @@ async function pushCalendarNote(
     }
   }
 
-  if (frontmatter.start) {
-    const startStr = frontmatter.start instanceof Date ? frontmatter.start.toISOString() : String(frontmatter.start);
-    payload.start = startStr.includes('T')
-      ? { dateTime: startStr }
-      : { date: startStr };
-  }
-  if (frontmatter.end) {
-    const endStr = frontmatter.end instanceof Date ? frontmatter.end.toISOString() : String(frontmatter.end);
-    payload.end = endStr.includes('T')
-      ? { dateTime: endStr }
-      : { date: endStr };
+  // Normalise start/end to strings first (see eventTimeString), so the payload, the hash and the note agree.
+  for (const key of ['start', 'end'] as const) {
+    if (frontmatter[key]) frontmatter[key] = eventTimeString(frontmatter[key]);
+    if (frontmatter[key]) payload[key] = frontmatter[key].includes('T') ? { dateTime: frontmatter[key] } : { date: frontmatter[key] };
   }
 
   let res: { data: calendar_v3.Schema$Event };
@@ -494,19 +501,7 @@ async function pushCalendarNote(
   // the calendar simply rolls over into a new month, and the change has just
   // been pushed to (or already matches) Google.
   if (frontmatter.google_id && frontmatter.start) {
-    const startRaw  = frontmatter.start instanceof Date ? frontmatter.start.toISOString() : String(frontmatter.start);
-    const datePart  = startRaw.slice(0, 10);
-    const timePart  = startRaw.includes('T')
-      ? startRaw.slice(11, 16).replace(':', '') // "HH:MM" → "HHMM"
-      : '0000';
-    const yearStr   = datePart.slice(0, 4);
-    const monthStr  = datePart.slice(5, 7);
-    const safeTitle = sanitizeTitle(summary);
-    const shortId   = (frontmatter.google_id as string).substring(0, 8);
-    const activeIdealRelative = `{Calendar}/${yearStr}-${monthStr}/${datePart}-${timePart}-${safeTitle}-${shortId}.md`;
-    const idealRelative = isPastMonth(datePart)
-      ? `${ARCHIVE_PREFIX}/${activeIdealRelative}`
-      : activeIdealRelative;
+    const idealRelative = eventNotePath(frontmatter.start, summary, frontmatter.google_id);
 
     // Build current relative path from the args we already have — this is
     // more reliable than path.relative() which can produce backslashes or
@@ -522,7 +517,6 @@ async function pushCalendarNote(
         const wasArchived = currentRelative.startsWith(`${ARCHIVE_PREFIX}/`);
         const nowArchived = idealRelative.startsWith(`${ARCHIVE_PREFIX}/`);
         const verb = !wasArchived && nowArchived ? 'Archived' : wasArchived && !nowArchived ? 'Unarchived' : 'Relocated';
-        const { renameAndRefactorLinks } = await import('./refactor.js');
         await renameAndRefactorLinks(config.vaultResolved, currentRelative, idealRelative);
         console.log(`[Push] ${verb} event: ${currentRelative} → ${idealRelative}`);
       } catch (err: any) {
