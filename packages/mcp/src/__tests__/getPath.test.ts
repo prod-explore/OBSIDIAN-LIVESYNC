@@ -167,7 +167,7 @@ test('get_path: non-existent path throws ENOENT', async () => {
     const missingPath = path.join(vault, 'does-not-exist.md');
     await assert.rejects(
       () => fs.stat(missingPath),
-      (err: any) => err.code === 'ENOENT'
+      (err: NodeJS.ErrnoException) => err.code === 'ENOENT'
     );
   } finally {
     await cleanup(vault);

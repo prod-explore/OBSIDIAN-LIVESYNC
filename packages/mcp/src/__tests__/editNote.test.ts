@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { resolveVaultPath } from "../security.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { Config } from "../config.js";
 
 // ---------------------------------------------------------------------------
 // Minimal stub of ToolContext / McpServer so we can call registerEditNote
@@ -37,7 +38,7 @@ async function setup() {
 
   // Dynamically import so the module resolves relative to dist/.
   const { registerEditNote } = await import("../tools/editNote.js");
-  registerEditNote(server as any, { config: { vaultResolved: vaultDir } as any });
+  registerEditNote(server as unknown as McpServer, { config: { vaultResolved: vaultDir } as unknown as Config });
 }
 
 async function call(args: Record<string, unknown>) {
@@ -122,8 +123,8 @@ test("blocks path traversal", async () => {
     const res = await call({ path: "../../etc/passwd", start_line: 1, end_line: 1, new_content: "x" });
     // If resolveVaultPath didn't throw, the tool should still fail
     assert.equal(res.isError, true);
-  } catch (err: any) {
+  } catch (err) {
     // resolveVaultPath threw PathTraversalError — that's also correct
-    assert.match(err.message ?? err.toString(), /traversal|outside|vault/i);
+    assert.match(err instanceof Error ? err.message : String(err), /traversal|outside|vault/i);
   }
 });

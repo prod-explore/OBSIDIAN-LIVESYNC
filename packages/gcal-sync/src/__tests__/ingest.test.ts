@@ -2,10 +2,11 @@ import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { calendar_v3 } from 'googleapis';
+import type { calendar_v3, tasks_v1 } from 'googleapis';
 import { computeSyncHash } from '../sync/hash.js';
 import {
   apiError, dateFromNow, emptyState, exists, fakeCalendar, fakeTasks, ingest, listNotes, makeVault, readNote, removeVaults, today, writeNote,
+  type Call,
 } from './fakes.js';
 
 after(removeVaults);
@@ -223,11 +224,11 @@ test('any other error leaves the sync token alone and does not throw', async () 
 
 // ── tasks ───────────────────────────────────────────────────────────────────
 
-const task = (over: Record<string, any> = {}) => ({
+const task = (over: tasks_v1.Schema$Task = {}): tasks_v1.Schema$Task => ({
   id: 'tasknumber1', title: 'Buy milk', status: 'needsAction', updated: '2026-02-01T08:00:00.000Z', ...over,
 });
 
-const taskPages = (byList: Record<string, any[]>) => (p: any) => ({ data: { items: byList[p.tasklist] ?? [] } });
+const taskPages = (byList: Record<string, tasks_v1.Schema$Task[]>) => (p: Call) => ({ data: { items: byList[p.tasklist ?? ''] ?? [] } });
 
 test('Google tasks become notes: the default list in {Tasks}, other lists in a folder named after them', async () => {
   const config = await makeVault();
@@ -258,7 +259,7 @@ test('Google tasks become notes: the default list in {Tasks}, other lists in a f
 test('completing a task in Google archives its note, un-completing brings it back', async () => {
   const config = await makeVault();
   const state = emptyState();
-  const run = (t: any) => ingest(config, state, fakeCalendar().client, fakeTasks({}, { list: taskPages({ L1: [t] }) }).client);
+  const run = (t: tasks_v1.Schema$Task) => ingest(config, state, fakeCalendar().client, fakeTasks({}, { list: taskPages({ L1: [t] }) }).client);
 
   await run(task());
   await run(task({ status: 'completed', updated: '2026-02-02T08:00:00.000Z' }));
@@ -271,7 +272,7 @@ test('completing a task in Google archives its note, un-completing brings it bac
 test('a task deleted in Google marks its note cancelled and archives it', async () => {
   const config = await makeVault();
   const state = emptyState();
-  const run = (t: any) => ingest(config, state, fakeCalendar().client, fakeTasks({}, { list: taskPages({ L1: [t] }) }).client);
+  const run = (t: tasks_v1.Schema$Task) => ingest(config, state, fakeCalendar().client, fakeTasks({}, { list: taskPages({ L1: [t] }) }).client);
 
   await run(task());
   await run(task({ deleted: true, updated: '2026-02-02T08:00:00.000Z' }));
@@ -346,8 +347,10 @@ test('every page of task lists is read', async () => {
     { items: [{ id: 'L1', title: 'My Tasks' }], nextPageToken: 'more' },
     { items: [{ id: 'L2', title: 'Second' }] },
   ];
-  const tasks = fakeTasks({}, { list: taskPages({ L2: [task({ id: 'secondlist01', title: 'Found' })] }) });
-  (tasks.client.tasklists as any).list = async (p: any) => ({ data: p.pageToken ? pages[1] : pages[0] });
+  const tasks = fakeTasks(
+    { listApi: { list: (p) => ({ data: p.pageToken ? pages[1] : pages[0] }) } },
+    { list: taskPages({ L2: [task({ id: 'secondlist01', title: 'Found' })] }) },
+  );
 
   await ingest(config, emptyState(), fakeCalendar().client, tasks.client);
 

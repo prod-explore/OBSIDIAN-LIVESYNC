@@ -113,26 +113,51 @@ export const today = () => dateFromNow(0);
 
 // ── Google fakes ────────────────────────────────────────────────────────────
 
-type Handler = (params: any) => any;
+/** A request body, as loosely as the tests need to read it. */
+export type Body = Record<string, unknown>;
 
-function recorder<T extends string>(names: readonly T[], handlers: Partial<Record<T, Handler>>, defaults: Record<T, Handler>) {
-  const calls = Object.fromEntries(names.map((n) => [n, [] as any[]])) as Record<T, any[]>;
+/** The part of a Google request that the fakes and the tests look at. */
+export interface Call {
+  tasklist?: string;
+  task?: string;
+  calendarId?: string;
+  eventId?: string;
+  syncToken?: string;
+  pageToken?: string;
+  timeMin?: string;
+  updatedMin?: string;
+  showDeleted?: boolean;
+  requestBody?: Body;
+}
+
+/** An insert or a patch: always has a body. */
+export interface Written extends Call {
+  requestBody: Body;
+}
+
+type Method = 'list' | 'get' | 'insert' | 'patch' | 'delete';
+type ParamsOf<M extends Method> = M extends 'insert' | 'patch' ? Written : Call;
+type Handlers<M extends Method> = { [K in M]?: (params: ParamsOf<K>) => unknown };
+type Calls<M extends Method> = { [K in M]: ParamsOf<K>[] };
+
+function recorder<M extends Method>(names: readonly M[], handlers: Handlers<M>, defaults: Required<Handlers<M>>) {
+  const calls = Object.fromEntries(names.map((n) => [n, []])) as unknown as Calls<M>;
   const fns = Object.fromEntries(
     names.map((n) => [
       n,
-      async (params: any) => {
-        calls[n].push(params);
-        return (handlers[n] ?? defaults[n])(params);
+      async (params: ParamsOf<M>) => {
+        (calls[n] as ParamsOf<M>[]).push(params);
+        return ((handlers[n] ?? defaults[n]) as (p: ParamsOf<M>) => unknown)(params);
       },
     ]),
-  ) as Record<T, (params: any) => Promise<any>>;
+  ) as Record<M, (params: ParamsOf<M>) => Promise<unknown>>;
   return { calls, fns };
 }
 
 let idCounter = 0;
 const nextId = (prefix: string) => `${prefix}${String(++idCounter).padStart(8, '0')}`;
 
-export function fakeCalendar(handlers: Partial<Record<'list' | 'insert' | 'patch' | 'delete', Handler>> = {}) {
+export function fakeCalendar(handlers: Handlers<'list' | 'insert' | 'patch' | 'delete'> = {}) {
   const { calls, fns } = recorder(['list', 'insert', 'patch', 'delete'] as const, handlers, {
     list: () => ({ data: { items: [], nextSyncToken: 'sync-1' } }),
     insert: () => ({ data: { id: nextId('evt'), updated: new Date().toISOString() } }),
@@ -145,17 +170,18 @@ export function fakeCalendar(handlers: Partial<Record<'list' | 'insert' | 'patch
 export interface TaskListSpec { id: string; title: string }
 
 export function fakeTasks(
-  opts: { lists?: TaskListSpec[]; defaultId?: string } = {},
-  handlers: Partial<Record<'list' | 'insert' | 'patch' | 'delete', Handler>> = {},
+  opts: { lists?: TaskListSpec[]; defaultId?: string; listApi?: Handlers<'list' | 'get' | 'insert'> } = {},
+  handlers: Handlers<'list' | 'insert' | 'patch' | 'delete'> = {},
 ) {
   const lists = opts.lists ?? [{ id: 'L1', title: 'My Tasks' }];
   const defaultId = opts.defaultId ?? lists[0]?.id;
   const listApi = recorder(['list', 'get', 'insert'] as const, {
-    insert: (p: any) => {
-      const created = { id: nextId('list'), title: p.requestBody.title };
+    insert: (p) => {
+      const created = { id: nextId('list'), title: String(p.requestBody?.title) };
       lists.push(created);
       return { data: created };
     },
+    ...opts.listApi,
   }, {
     list: () => ({ data: { items: lists } }),
     get: () => ({ data: { id: defaultId } }),

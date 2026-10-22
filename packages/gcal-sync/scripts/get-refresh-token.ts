@@ -35,6 +35,7 @@ console.log('1. Click this link and sign in with Google:');
 console.log(authUrl);
 console.log('====================================================\n');
 
+// eslint-disable-next-line @typescript-eslint/no-misused-promises -- the handler catches its own errors
 const server = http.createServer(async (req, res) => {
   try {
     if (req.url && req.url.startsWith('/oauth2callback')) {

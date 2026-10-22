@@ -4,35 +4,38 @@ import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import type { tasks_v1 } from 'googleapis';
 import { emptyState, exists, fakeCalendar, fakeTasks, ingest, listNotes, makeVault, push, readNote, removeVaults, writeNote } from './fakes.js';
 
 after(removeVaults);
 
+type StoredTask = tasks_v1.Schema$Task & { tasklist?: string };
+
 /** An in-memory Google Tasks with one list; list() honours showDeleted and updatedMin like the real one. */
 function googleTasks(lists?: Array<{ id: string; title: string }>) {
-  const store = new Map<string, any>();
+  const store = new Map<string, StoredTask>();
   let clock = Date.parse('2026-02-01T08:00:00.000Z');
   const stamp = () => new Date((clock += 1000)).toISOString();
   const fake = fakeTasks({ lists }, {
     insert: (p) => {
-      const t = { id: `gtask${store.size + 1}xxxx`, ...p.requestBody, tasklist: p.tasklist, updated: stamp() };
-      store.set(t.id, t);
+      const t: StoredTask = { id: `gtask${store.size + 1}xxxx`, ...(p.requestBody as tasks_v1.Schema$Task), tasklist: p.tasklist, updated: stamp() };
+      store.set(t.id as string, t);
       return { data: t };
     },
     patch: (p) => {
-      const t = { ...store.get(p.task), ...p.requestBody, updated: stamp() };
-      store.set(t.id, t);
+      const t: StoredTask = { ...store.get(p.task ?? ''), ...(p.requestBody as tasks_v1.Schema$Task), updated: stamp() };
+      store.set(t.id as string, t);
       return { data: t };
     },
     delete: (p) => {
-      const t = store.get(p.task);
+      const t = store.get(p.task ?? '');
       if (!t || t.deleted) throw Object.assign(new Error('gone'), { code: 404 });
-      store.set(p.task, { ...t, deleted: true, updated: stamp() });
+      store.set(p.task ?? '', { ...t, deleted: true, updated: stamp() });
       return {};
     },
     list: (p) => ({
       data: {
-        items: [...store.values()].filter((t) => t.tasklist === p.tasklist && (p.showDeleted || !t.deleted) && (!p.updatedMin || t.updated >= p.updatedMin)),
+        items: [...store.values()].filter((t) => t.tasklist === p.tasklist && (p.showDeleted || !t.deleted) && (!p.updatedMin || (t.updated ?? '') >= p.updatedMin)),
       },
     }),
   });

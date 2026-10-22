@@ -2,6 +2,7 @@ import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import type { RawFrontmatter } from '../markdown/notes.js';
 import { computeSyncHash } from '../sync/hash.js';
 import {
   apiError, dateFromNow, emptyState, exists, fakeCalendar, fakeTasks, listNotes, makeVault, push, readNote, removeVaults, writeNote,
@@ -13,7 +14,7 @@ const D = dateFromNow(200);
 const MONTH = D.slice(0, 7);
 
 /** A note the way ingest leaves it: the hash matches, so it counts as untouched. */
-const synced = (fm: Record<string, any>) => ({ ...fm, sync_hash: computeSyncHash(fm), synced_at: new Date().toISOString() });
+const synced = (fm: RawFrontmatter): RawFrontmatter => ({ ...fm, sync_hash: computeSyncHash(fm), synced_at: new Date().toISOString() });
 
 // ── tasks ───────────────────────────────────────────────────────────────────
 
@@ -137,8 +138,7 @@ test('when Google refuses a new task the note stays as it was and the next cycle
 test('when Google cannot be asked which list a folder means, nothing is pushed into the wrong one', async () => {
   const config = await makeVault();
   await writeNote(config, '{Tasks}/Project A/Buy milk.md', { title: 'Buy milk', status: 'needsAction' });
-  const tasks = fakeTasks();
-  (tasks.client.tasklists as any).list = async () => { throw apiError(503); };
+  const tasks = fakeTasks({ listApi: { list: () => { throw apiError(503); } } });
 
   await assert.doesNotReject(push(config, emptyState(), fakeCalendar().client, tasks.client));
 
@@ -225,7 +225,7 @@ test('rescheduling an event note patches Google and renames the note', async () 
   await push(config, { ...emptyState(), knownEventIds: { primary: ['abcdefgh1234'] } }, cal.client, fakeTasks().client);
 
   assert.equal(cal.calls.patch[0].eventId, 'abcdefgh1234');
-  assert.equal(cal.calls.patch[0].requestBody.start.dateTime, `${D}T20:00:00+01:00`);
+  assert.deepEqual(cal.calls.patch[0].requestBody.start, { dateTime: `${D}T20:00:00+01:00` });
   assert.deepEqual(await listNotes(config), [`{Calendar}/${MONTH}/${D}-2000-Dinner-abcdefgh.md`]);
 });
 

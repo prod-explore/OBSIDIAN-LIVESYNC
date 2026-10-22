@@ -1,0 +1,11 @@
+dist/
+coverage/
+node_modules/
+package-lock.json
+# Prose is wrapped and tabled by hand.
+*.md
+# Runtime data
+data/
+config/
+vault/
+gcal-sync-state/

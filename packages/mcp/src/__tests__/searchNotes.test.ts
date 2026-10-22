@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { Config } from '../config.js';
 import { registerSearchNotes, MAX_SEARCH_RESULTS } from '../tools/searchNotes.js';
 
 type Result = { content: { type: string; text: string }[]; isError?: boolean };
 
 async function search(vault: string, query: string): Promise<string> {
   let handler: ((args: { query: string }) => Promise<Result>) | undefined;
-  registerSearchNotes({ tool: (_n: string, _d: string, _s: unknown, h: typeof handler) => { handler = h; } } as any, { config: { vaultResolved: vault } as any });
+  registerSearchNotes({ tool: (_n: string, _d: string, _s: unknown, h: typeof handler) => { handler = h; } } as unknown as McpServer, { config: { vaultResolved: vault } as unknown as Config });
   return (await handler!({ query })).content[0].text;
 }
 
