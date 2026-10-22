@@ -10,6 +10,7 @@ import { ARCHIVE_PREFIX, eventNotePath } from './archive.js';
 import { resolveTasklistId } from './tasklists.js';
 import { isMassDeletion } from './safety.js';
 import { renameAndRefactorLinks } from './refactor.js';
+import { toActive, toArchive, listNameOfFolder, isArchivedPath } from './folders.js';
 
 // ---------------------------------------------------------------------------
 // Main push function
@@ -143,13 +144,7 @@ async function pushFolder(
 
     let isMoved = false;
     if (folder === '{Tasks}' && !isNew) {
-      let listName = '@default';
-      const folderParts = relFolder.split('/');
-      const tasksIndex = folderParts.indexOf('{Tasks}');
-      if (tasksIndex !== -1 && tasksIndex < folderParts.length - 1) {
-        listName = folderParts[tasksIndex + 1];
-      }
-      const targetListId = await resolveTasklistId(tasks, listName);
+      const targetListId = await resolveTasklistId(tasks, listNameOfFolder(relFolder));
       if (targetListId && frontmatter.tasklist_id && frontmatter.tasklist_id !== targetListId) {
         isMoved = true;
       }
@@ -248,7 +243,7 @@ async function handleFile(
 ) {
   try {
     if (folder === '{Tasks}') {
-      const fromArchive = relFolder.startsWith(`${ARCHIVE_PREFIX}/`);
+      const fromArchive = isArchivedPath(relFolder);
       await pushTaskNote(tasks, config, state, fullPath, relFolder, file, frontmatter, body, isNew, fromArchive);
     } else {
       await pushCalendarNote(calendar, config, state, fullPath, relFolder, file, frontmatter, body, isNew);
@@ -281,17 +276,8 @@ async function pushTaskNote(
   isNew: boolean,
   fromArchive: boolean
 ) {
-  let listName = '@default';
-  const folderParts = relFolder.split('/');
-  // Example relFolders:
-  // "{Tasks}" -> length 1
-  // "04-Archive/{Tasks}" -> length 2 (handled via fromArchive? actually we want listName from archive too)
-  // "{Tasks}/Project A" -> length 2 -> Project A
-  // "04-Archive/{Tasks}/Project A" -> length 3 -> Project A
-  const tasksIndex = folderParts.indexOf('{Tasks}');
-  if (tasksIndex !== -1 && tasksIndex < folderParts.length - 1) {
-    listName = folderParts[tasksIndex + 1];
-  }
+  // "{Tasks}" and "04-Archive/{Tasks}" are the default list; "{Tasks}/Project A" and its archive mirror are "Project A".
+  const listName = listNameOfFolder(relFolder);
 
   // No fallback to some other list when Google cannot be asked: filing the task in the wrong list now would
   // only be undone (delete and re-create) by the next cycle. The error is logged by handleFile and retried.
@@ -371,9 +357,8 @@ async function pushTaskNote(
   await fs.writeFile(fullPath, serializeNote(frontmatter, body), 'utf-8');
 
   if (shouldArchive || shouldUnarchive) {
-    const targetRelative = shouldArchive
-      ? `${ARCHIVE_PREFIX}/{Tasks}/${file}`
-      : `{Tasks}/${file}`;
+    // Same list folder, other side of the archive boundary: a task never changes list by being completed.
+    const targetRelative = `${shouldArchive ? toArchive(relFolder) : toActive(relFolder)}/${file}`;
     const targetPath = resolveVaultPath(config.vaultResolved, targetRelative);
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     try {
