@@ -112,7 +112,8 @@ On connect every client gets the tool list and one line pointing it at `_Systems
 - **Layout.** Folder names are literal, braces included: tasks live in `{Tasks}/` (a subfolder is a Google task list, created if missing), events in `{Calendar}/YYYY-MM/YYYY-MM-DD-HHMM-Title-shortId.md` (`0000` for all-day events). Renaming or re-dating an event moves its file and rewrites every `[[wikilink]]` to it.
 - **What syncs.** Only frontmatter: `title`, `status`, `start`/`end` (events), `due` (tasks) and `description`. Reminders are mirrored into frontmatter too. **The Markdown body is never read from or written to Google**, in either direction — it is yours and your agent's space for context.
 - **Archiving.** Completed or cancelled tasks move to `04-Archive/{Tasks}/`; events move to `04-Archive/{Calendar}/…` once their whole month has passed, and come back if that reverses.
-- **Conflicts.** If a note was edited locally while Google changed too, Google wins and your version is appended to `_Systems/sync-conflicts.md`. A deletion on Google only marks the note cancelled locally; deleting the note deletes the record on Google (behind the mass-deletion guard above).
+- **Conflicts.** If a note was edited locally while Google changed too, the more recent change wins. When Google's wins, your version is appended to `_Systems/sync-conflicts.md`. A deletion on Google only marks the note cancelled locally; deleting the note deletes the record on Google (behind the mass-deletion guard above), and that deletion does not come back as a note.
+- **When something goes wrong.** An item that cannot be applied is logged and skipped without blocking the others, and the sync does not move its progress marker past it, so it is fetched again next cycle. An expired Google sync token (they do expire) restarts that calendar with a full sync. Task lists created in Google later are picked up on the next cycle.
 
 Setup: create a Google Cloud project, enable the Calendar and Tasks APIs and create an OAuth client (Desktop app). Put `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` into `.env`, then get a refresh token on a machine with a browser:
 
@@ -128,10 +129,10 @@ Known limits: the `{Tasks}`, `{Calendar}` and `04-Archive` folder names are fixe
 
 ```bash
 cd mcp-src && npm ci && npm test            # strict type-check, build, 58 tests
-cd gcal-sync-src && npm ci && npm test      # strict type-check, build, 30 tests
+cd gcal-sync-src && npm ci && npm test      # strict type-check, build, 70 tests
 ```
 
-CI runs both, plus `npm audit` on runtime dependencies, a Docker build of each image, a validation of the compose file and a secret scan. The tests include real symbolic links on disk, an HTTP-level suite for the server (auth, both transports, the list of tools) and a simulated vault outage for the sync.
+CI runs both, plus `npm audit` on runtime dependencies, a Docker build of each image, a validation of the compose file and a secret scan. The tests include real symbolic links on disk, an HTTP-level suite for the server (auth, both transports, the list of tools), and the whole sync (ingest, push and full cycles) run against in-memory stand-ins for the Google APIs, including a simulated vault outage, expired tokens and failing writes.
 
 Conventions for changing or adding tools — especially what this project will never hand to an agent — are in [`AGENTS.md`](AGENTS.md). Running it day to day (backups, recovering notes, file ownership, logs) is in [`docs/operations.md`](docs/operations.md).
 
