@@ -1,6 +1,6 @@
 # Build from the repository root (the dependencies are locked once, for the whole workspace):
 #   docker build -f packages/mcp/Dockerfile .
-FROM node:22-alpine AS builder
+FROM node:25-alpine AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY packages/mcp/tsconfig.json packages/mcp/
 COPY packages/mcp/src packages/mcp/src
 RUN npm run build --workspace packages/mcp
 
-FROM node:22-alpine
+FROM node:25-alpine
 
 WORKDIR /app
 
