@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as fs from 'fs/promises';
 import { resolveVaultPath } from '../security.js';
+import { copyToTrash } from '../trash.js';
 import { errorMessage } from '../errors.js';
-import { ok, fail, ToolContext } from './types.js';
+import { ok, fail, tooManyWrites, ToolContext } from './types.js';
 
 /**
  * Edits a range of lines in an existing note without overwriting the whole file.
@@ -12,10 +13,12 @@ import { ok, fail, ToolContext } from './types.js';
  * - Path goes through resolveVaultPath() — same traversal guard as every other tool.
  * - File must already exist; this tool is not a creator (use write_note for that).
  * - Setting end_line === start_line - 1 is a pure insert: no lines are removed.
+ * - The version before the edit is copied to the trash first, as write_note does for an overwrite.
  * - Out-of-range indices are rejected with a descriptive error rather than silently
  *   clamped, so the agent gets clear feedback when it miscounts.
  */
-export function registerEditNote(server: McpServer, { config }: ToolContext): void {
+export function registerEditNote(server: McpServer, ctx: ToolContext): void {
+  const { config } = ctx;
   server.tool(
     'edit_note',
     'Replaces a range of lines in an existing note. Read the note first to determine line numbers. ' +
@@ -35,6 +38,8 @@ export function registerEditNote(server: McpServer, { config }: ToolContext): vo
         .describe('Content that replaces the specified line range (may be empty string to delete lines)'),
     },
     async ({ path: notePath, start_line, end_line, new_content }) => {
+      const limited = tooManyWrites(ctx);
+      if (limited) return limited;
       try {
         const fullPath = resolveVaultPath(config.vaultResolved, notePath);
 
@@ -74,6 +79,8 @@ export function registerEditNote(server: McpServer, { config }: ToolContext): vo
         // splice is 0-indexed; start_line is 1-indexed.
         lines.splice(start_line - 1, Math.max(0, removedCount), ...insertLines);
 
+        // Like an overwrite by write_note: the version before the edit stays recoverable.
+        const backup = await copyToTrash(config.vaultResolved, config.trashDir, notePath);
         await fs.writeFile(fullPath, lines.join('\n'), 'utf-8');
 
         const action =
@@ -81,7 +88,7 @@ export function registerEditNote(server: McpServer, { config }: ToolContext): vo
             ? `Inserted ${insertLines.length} line${insertLines.length === 1 ? '' : 's'} before line ${start_line} in ${notePath}`
             : `Replaced lines ${start_line}–${end_line} in ${notePath} (${removedCount} → ${insertLines.length} line${insertLines.length === 1 ? '' : 's'})`;
 
-        return ok(action);
+        return ok(`${action}; previous version backed up to ${backup}`);
       } catch (err) {
         return fail(`Error editing note: ${errorMessage(err)}`);
       }

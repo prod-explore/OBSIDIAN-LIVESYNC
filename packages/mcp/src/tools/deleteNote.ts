@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import { resolveVaultPath } from '../security.js';
 import { moveToTrash } from '../trash.js';
 import { errorMessage } from '../errors.js';
-import { ok, fail, ToolContext } from './types.js';
+import { ok, fail, tooManyWrites, ToolContext } from './types.js';
 
 /**
  * "Deletes" a note by moving it into a vault-local trash folder — this tool
@@ -17,7 +17,8 @@ import { ok, fail, ToolContext } from './types.js';
  * a timestamp — the second delete does not overwrite the first one sitting in trash.
  * Folders are refused: this tool never removes more than one file.
  */
-export function registerDeleteNote(server: McpServer, { config }: ToolContext): void {
+export function registerDeleteNote(server: McpServer, ctx: ToolContext): void {
+  const { config } = ctx;
   server.tool(
     'delete_note',
     'Moves a note to the vault trash folder (soft delete — does not permanently remove it).',
@@ -25,6 +26,8 @@ export function registerDeleteNote(server: McpServer, { config }: ToolContext): 
       path: z.string().describe('Path to the note relative to the vault root'),
     },
     async ({ path: notePath }) => {
+      const limited = tooManyWrites(ctx);
+      if (limited) return limited;
       try {
         const fullPath = resolveVaultPath(config.vaultResolved, notePath);
 

@@ -9,16 +9,17 @@ import { errorMessage } from './errors.js';
 import { logger } from './logger.js';
 import { registerAllTools } from './tools/index.js';
 import { tokensMatch } from './security.js';
+import { WriteLimiter } from './rateLimit.js';
 
 /** What clients see in `serverInfo`: the package's own version, so the two cannot drift apart. */
 export const SERVER_VERSION = (createRequire(import.meta.url)('../package.json') as { version: string }).version;
 
-function createMcpServer(config: Config): McpServer {
+function createMcpServer(config: Config, limiter: WriteLimiter): McpServer {
   const server = new McpServer(
     { name: 'Obsidian Headless MCP', version: SERVER_VERSION },
     config.instructions ? { instructions: config.instructions } : {},
   );
-  registerAllTools(server, config);
+  registerAllTools(server, config, limiter);
   return server;
 }
 
@@ -137,7 +138,9 @@ function handle(
 export function createApp(config: Config): { app: express.Express; sseRegistry: SseSessionRegistry } {
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json());
+  app.use(express.json({ limit: config.bodyLimit }));
+  // One limiter for every per-request server: the limit is on the vault, not on one connection.
+  const writeLimiter = new WriteLimiter(config.writeLimit.max, config.writeLimit.windowMs);
 
   const sseRegistry = new SseSessionRegistry(config.sseSessionMaxAgeMs, config.sseSweepIntervalMs);
   sseRegistry.startSweeping();
@@ -154,7 +157,7 @@ export function createApp(config: Config): { app: express.Express; sseRegistry: 
       if (!requireAuth(config, req, res)) return;
 
       try {
-        const server = createMcpServer(config);
+        const server = createMcpServer(config, writeLimiter);
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
         res.on('close', () => {
@@ -178,7 +181,7 @@ export function createApp(config: Config): { app: express.Express; sseRegistry: 
       if (!requireAuth(config, req, res)) return;
 
       const transport = new SSEServerTransport('/mcp/messages', res);
-      const connectionServer = createMcpServer(config);
+      const connectionServer = createMcpServer(config, writeLimiter);
 
       await connectionServer.connect(transport);
       sseRegistry.add(transport.sessionId, { transport, server: connectionServer });

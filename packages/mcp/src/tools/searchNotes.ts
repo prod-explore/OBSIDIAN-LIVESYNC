@@ -42,7 +42,7 @@ async function walkAndSearch(
 /** Most paths one search returns; a vault-wide hit list beyond this is noise for the client. */
 export const MAX_SEARCH_RESULTS = 100;
 
-export function registerSearchNotes(server: McpServer, { config }: ToolContext): void {
+export function registerSearchNotes(server: McpServer, { config }: Pick<ToolContext, 'config'>): void {
   server.tool(
     'search_notes',
     'Searches for notes containing a specific keyword or phrase.',

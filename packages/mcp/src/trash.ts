@@ -2,6 +2,13 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { resolveVaultPath } from './security.js';
 
+/** Name of a trashed copy: a timestamp, then the note's path flattened so two notes with one name cannot collide. */
+function trashedName(notePathRelative: string): string {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  // Flatten the path for the trash directory (e.g. "Folder/Note.md" -> "Folder__Note.md")
+  return `${timestamp}__${notePathRelative.replace(/[/\\]/g, '__')}`;
+}
+
 /**
  * Safely moves a file to the vault's trash directory.
  * Generates a timestamped filename to prevent collisions in the trash.
@@ -10,14 +17,25 @@ import { resolveVaultPath } from './security.js';
 export async function moveToTrash(vaultRoot: string, trashDir: string, notePathRelative: string): Promise<string> {
   const fullPath = resolveVaultPath(vaultRoot, notePathRelative);
   const trashRoot = resolveVaultPath(vaultRoot, trashDir, { allowHidden: true });
-
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  // Flatten the path for the trash directory (e.g. "Folder/Note.md" -> "Folder__Note.md")
-  const safeName = notePathRelative.replace(/[/\\]/g, '__');
-  const trashPath = path.join(trashRoot, `${timestamp}__${safeName}`);
+  const trashPath = path.join(trashRoot, trashedName(notePathRelative));
 
   await fs.mkdir(trashRoot, { recursive: true });
   await fs.rename(fullPath, trashPath);
+
+  return `${trashDir}/${path.basename(trashPath)}`;
+}
+
+/**
+ * Keeps a copy of a note in the trash and leaves the note where it is; used before an edit changes it in place.
+ * Returns the relative path of the copy.
+ */
+export async function copyToTrash(vaultRoot: string, trashDir: string, notePathRelative: string): Promise<string> {
+  const fullPath = resolveVaultPath(vaultRoot, notePathRelative);
+  const trashRoot = resolveVaultPath(vaultRoot, trashDir, { allowHidden: true });
+  const trashPath = path.join(trashRoot, trashedName(notePathRelative));
+
+  await fs.mkdir(trashRoot, { recursive: true });
+  await fs.copyFile(fullPath, trashPath);
 
   return `${trashDir}/${path.basename(trashPath)}`;
 }

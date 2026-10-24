@@ -11,6 +11,10 @@ export interface Config {
   sseSessionMaxAgeMs: number;
   /** How often (ms) the sweep checks for stale SSE sessions. */
   sseSweepIntervalMs: number;
+  /** Largest JSON request body the server accepts (express `limit` syntax, e.g. "5mb"); a bigger note is refused with 413. */
+  bodyLimit: string;
+  /** Mutating tool calls (write, edit, move, delete) allowed per window; 0 turns the limit off. */
+  writeLimit: { max: number; windowMs: number };
   /** Sent to every client on connect (MCP `instructions`); undefined = send none. See resolveInstructions(). */
   instructions: string | undefined;
 }
@@ -33,6 +37,13 @@ export function resolveInstructions(env: NodeJS.ProcessEnv): string | undefined 
   return value.toLowerCase() === 'none' ? undefined : value;
 }
 
+/** A whole number of at least 0 from the environment; anything else falls back to the default. */
+function nonNegative(value: string | undefined, fallback: number): number {
+  if (value === undefined || value.trim() === '') return fallback;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 ? n : fallback;
+}
+
 /**
  * Reads and validates environment configuration. Throws if a required secret is
  * missing — this server should never boot into an unauthenticated state.
@@ -53,6 +64,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     trashDir: env.TRASH_DIR || '.trash',
     sseSessionMaxAgeMs: Number(env.SSE_SESSION_MAX_AGE_MS) || 60 * 60 * 1000, // 1h
     sseSweepIntervalMs: Number(env.SSE_SWEEP_INTERVAL_MS) || 5 * 60 * 1000, // 5m
+    bodyLimit: env.MCP_BODY_LIMIT?.trim() || '5mb',
+    writeLimit: { max: nonNegative(env.MCP_WRITE_LIMIT_PER_MINUTE, 120), windowMs: 60_000 },
     instructions: resolveInstructions(env),
   };
 }

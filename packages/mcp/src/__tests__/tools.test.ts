@@ -241,3 +241,60 @@ test('delete_note, write_note and move_note refuse folders, so nothing is ever r
   assert.equal(await h.exists('bulk/Moved'), false);
   assert.ok(!(await trashed()).some((f) => f.startsWith('bulk__Project')));
 });
+
+// ── edit_note keeps the version before the edit ─────────────────────────────
+
+test('edit_note leaves the previous version of the note in the trash', async () => {
+  await h.write('edit/kept.md', 'one\ntwo\nthree');
+  const res = await h.call('edit_note', { path: 'edit/kept.md', start_line: 2, end_line: 2, new_content: 'TWO' });
+  assert.equal(res.isError, undefined);
+  assert.match(text(res), /previous version backed up to \.trash\//);
+  assert.equal(await h.read('edit/kept.md'), 'one\nTWO\nthree');
+  const saved = (await h.files('.trash')).find((f) => f.endsWith('edit__kept.md'));
+  assert.ok(saved, 'the old version is in the trash');
+  assert.equal(await h.read(saved), 'one\ntwo\nthree');
+});
+
+test('a refused edit leaves nothing in the trash', async () => {
+  await h.write('edit/refused.md', 'only line');
+  const res = await h.call('edit_note', { path: 'edit/refused.md', start_line: 5, end_line: 5, new_content: 'x' });
+  assert.equal(res.isError, true);
+  assert.ok(!(await h.files('.trash')).some((f) => f.endsWith('edit__refused.md')));
+});
+
+// ── the limit on changes ────────────────────────────────────────────────────
+
+test('writes past the limit are refused with a wait time; reads and the vault are untouched', async () => {
+  const limited = await makeHarness({ writeLimit: { max: 3, windowMs: 60_000 } });
+  try {
+    await limited.write('seed.md', 'one\ntwo');
+    const results = [
+      await limited.call('write_note', { path: 'a.md', content: '1' }),
+      await limited.call('edit_note', { path: 'seed.md', start_line: 1, end_line: 1, new_content: 'ONE' }),
+      await limited.call('move_note', { from: 'a.md', to: 'b.md' }),
+    ];
+    assert.deepEqual(
+      results.map((r) => r.isError),
+      [undefined, undefined, undefined],
+    );
+
+    for (const [tool, args] of [
+      ['write_note', { path: 'c.md', content: '3' }],
+      ['edit_note', { path: 'seed.md', start_line: 2, end_line: 2, new_content: 'TWO' }],
+      ['move_note', { from: 'b.md', to: 'd.md' }],
+      ['delete_note', { path: 'b.md' }],
+    ] as const) {
+      const res = await limited.call(tool, args);
+      assert.equal(res.isError, true, tool);
+      assert.match(text(res), /Too many changes.*Try again in \d+s/, tool);
+    }
+    assert.equal(await limited.exists('c.md'), false);
+    assert.equal(await limited.read('seed.md'), 'ONE\ntwo');
+    assert.equal(await limited.exists('b.md'), true, 'the note that was not deleted is still there');
+
+    const read = await limited.call('get_path', { path: 'seed.md' });
+    assert.equal(read.isError, undefined, 'reading is never limited');
+  } finally {
+    await limited.cleanup();
+  }
+});

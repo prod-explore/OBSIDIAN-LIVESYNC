@@ -13,6 +13,7 @@ let http: Server;
 let base: string;
 let vault: string;
 let closeApp: () => void;
+let baseConfig: Config;
 
 before(async () => {
   vault = await fs.mkdtemp(path.join(os.tmpdir(), 'obs-server-'));
@@ -24,8 +25,11 @@ before(async () => {
     trashDir: '.trash',
     sseSessionMaxAgeMs: 60_000,
     sseSweepIntervalMs: 60_000,
+    bodyLimit: '5mb',
+    writeLimit: { max: 0, windowMs: 60_000 },
     instructions: undefined,
   };
+  baseConfig = config;
   const { app, sseRegistry } = createApp(config);
   closeApp = () => sseRegistry.stopSweeping();
   http = app.listen(0);
@@ -185,6 +189,31 @@ test('a malformed body is a JSON 400, logged without the body and without a stac
   assert.ok(!log.includes('BODY-TEXT-1234'), log);
   assert.ok(!log.includes(KEY), log);
   assert.ok(!/\n\s+at /.test(log), 'no stack trace');
+});
+
+test('a body over the limit is a JSON 413, a note of a few hundred kB is not', async () => {
+  const small = createApp({ ...baseConfig, bodyLimit: '1kb' });
+  const srv = small.app.listen(0);
+  await new Promise((r) => srv.once('listening', r));
+  try {
+    const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/mcp/sse?token=${KEY}`;
+    const post = (body: unknown) =>
+      fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await post({ jsonrpc: '2.0', method: 'x', params: { text: 'a'.repeat(5_000) } });
+    assert.equal(res.status, 413);
+    assert.deepEqual(await res.json(), { error: 'Bad request body' });
+  } finally {
+    small.sseRegistry.stopSweeping();
+    await new Promise((r) => srv.close(r));
+  }
+
+  // With the default limit, a 300 kB body gets as far as the MCP layer (which rejects it as a malformed request).
+  const res = await fetch(`${base}/mcp/sse?token=${KEY}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'x', params: { text: 'a'.repeat(300_000) } }),
+  });
+  assert.notEqual(res.status, 413);
 });
 
 test('the server introduces itself with the version in package.json', async () => {

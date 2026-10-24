@@ -21,7 +21,7 @@ import { ok, fail, ToolContext } from './types.js';
  * 2. After >5 min idle: same, to catch moves/renames that happened outside session.
  * 3. Exploring a specific area: get_vault_tree("Projects/Website", depth=-1).
  */
-export function registerVaultTree(server: McpServer, { config }: ToolContext): void {
+export function registerVaultTree(server: McpServer, { config }: Pick<ToolContext, 'config'>): void {
   server.tool(
     'get_vault_tree',
     'Returns a path listing of the vault (no file content). ' +

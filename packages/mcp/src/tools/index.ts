@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Config } from '../config.js';
+import { WriteLimiter } from '../rateLimit.js';
 import { registerGetPath } from './getPath.js';
 import { registerVaultTree } from './vaultTree.js';
 import { registerWriteNote } from './writeNote.js';
@@ -9,8 +10,12 @@ import { registerMoveNote } from './moveNote.js';
 import { registerDeleteNote } from './deleteNote.js';
 
 /** Registers every tool this server exposes onto a fresh McpServer instance. */
-export function registerAllTools(server: McpServer, config: Config): void {
-  const ctx = { config };
+export function registerAllTools(
+  server: McpServer,
+  config: Config,
+  limiter: WriteLimiter = new WriteLimiter(config.writeLimit.max, config.writeLimit.windowMs),
+): void {
+  const ctx = { config, limiter };
   registerGetPath(server, ctx);
   registerVaultTree(server, ctx);
   registerWriteNote(server, ctx);

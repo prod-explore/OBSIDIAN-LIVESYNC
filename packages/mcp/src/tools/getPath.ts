@@ -17,7 +17,7 @@ import { ok, fail, ToolContext } from './types.js';
  *   - path resolves to a folder → returns immediate children (non-recursive),
  *                                  sorted, with 📁/📄 prefix
  */
-export function registerGetPath(server: McpServer, { config }: ToolContext): void {
+export function registerGetPath(server: McpServer, { config }: Pick<ToolContext, 'config'>): void {
   server.tool(
     'get_path',
     'Reads a note OR lists a folder — auto-detected from the path. ' +

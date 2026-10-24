@@ -5,9 +5,10 @@ import * as path from 'path';
 import { resolveVaultPath } from '../security.js';
 import { moveToTrash } from '../trash.js';
 import { errorMessage } from '../errors.js';
-import { ok, fail, ToolContext } from './types.js';
+import { ok, fail, tooManyWrites, ToolContext } from './types.js';
 
-export function registerWriteNote(server: McpServer, { config }: ToolContext): void {
+export function registerWriteNote(server: McpServer, ctx: ToolContext): void {
+  const { config } = ctx;
   server.tool(
     'write_note',
     'Writes a new markdown note. Fails if the file already exists unless overwrite is true (old file goes to trash).',
@@ -17,6 +18,8 @@ export function registerWriteNote(server: McpServer, { config }: ToolContext): v
       overwrite: z.boolean().default(false).describe('If true, allow replacing an existing note (backed up to trash)'),
     },
     async ({ path: notePath, content, overwrite }) => {
+      const limited = tooManyWrites(ctx);
+      if (limited) return limited;
       try {
         const fullPath = resolveVaultPath(config.vaultResolved, notePath);
 

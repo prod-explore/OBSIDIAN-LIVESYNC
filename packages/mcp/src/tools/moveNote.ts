@@ -6,7 +6,7 @@ import { resolveVaultPath } from '../security.js';
 import { moveToTrash } from '../trash.js';
 import { errorMessage } from '../errors.js';
 import { logger } from '../logger.js';
-import { ok, fail, ToolContext } from './types.js';
+import { ok, fail, tooManyWrites, ToolContext } from './types.js';
 
 import { updateBacklinks } from './refactorLinks.js';
 
@@ -24,7 +24,8 @@ import { updateBacklinks } from './refactorLinks.js';
  *   crash mid-operation can't leave two copies or zero copies of the note.
  * - Updates backlinks to point to the new filename so we don't break the graph.
  */
-export function registerMoveNote(server: McpServer, { config }: ToolContext): void {
+export function registerMoveNote(server: McpServer, ctx: ToolContext): void {
+  const { config } = ctx;
   server.tool(
     'move_note',
     'Moves or renames a note within the vault. Fails if destination exists unless overwrite is set (clobbered file goes to trash). Automatically updates backlinks.',
@@ -34,6 +35,8 @@ export function registerMoveNote(server: McpServer, { config }: ToolContext): vo
       overwrite: z.boolean().default(false).describe('If true, allow replacing an existing file (backed up to trash)'),
     },
     async ({ from, to, overwrite }) => {
+      const limited = tooManyWrites(ctx);
+      if (limited) return limited;
       try {
         const fromPath = resolveVaultPath(config.vaultResolved, from);
         const toPath = resolveVaultPath(config.vaultResolved, to);

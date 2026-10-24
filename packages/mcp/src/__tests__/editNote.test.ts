@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Config } from '../config.js';
+import { WriteLimiter } from '../rateLimit.js';
 
 // ---------------------------------------------------------------------------
 // Minimal stub of ToolContext / McpServer so we can call registerEditNote
@@ -40,7 +41,10 @@ async function setup() {
 
   // Dynamically import so the module resolves relative to dist/.
   const { registerEditNote } = await import('../tools/editNote.js');
-  registerEditNote(server as unknown as McpServer, { config: { vaultResolved: vaultDir } as unknown as Config });
+  registerEditNote(server as unknown as McpServer, {
+    config: { vaultResolved: vaultDir, trashDir: '.trash' } as unknown as Config,
+    limiter: new WriteLimiter(0, 60_000),
+  });
 }
 
 async function call(args: Record<string, unknown>) {

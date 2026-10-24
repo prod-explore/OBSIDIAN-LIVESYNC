@@ -38,6 +38,8 @@ export async function makeHarness(over: Partial<Config> = {}): Promise<Harness> 
     trashDir: '.trash',
     sseSessionMaxAgeMs: 60_000,
     sseSweepIntervalMs: 60_000,
+    bodyLimit: '5mb',
+    writeLimit: { max: 0, windowMs: 60_000 },
     instructions: undefined,
     ...over,
   };
