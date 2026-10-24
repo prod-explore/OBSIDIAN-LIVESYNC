@@ -183,7 +183,7 @@ test('when Google changed after the local edit, Google wins and the loser is wri
   await ingest(config, state, fakeCalendar({ list: eventsPage([event()]) }).client, fakeTasks().client);
 
   const note = await readNote(config, EVENT_PATH);
-  await writeNote(config, EVENT_PATH, { ...note.frontmatter, title: 'Local title' });
+  await writeNote(config, EVENT_PATH, { ...note.frontmatter, title: 'Local title', description: 'local-only detail' });
 
   const later = new Date(Date.now() + 3_600_000).toISOString();
   await ingest(
@@ -197,6 +197,7 @@ test('when Google changed after the local edit, Google wins and the loser is wri
   assert.equal((await readNote(config, renamed)).frontmatter.title, 'Google title');
   const log = await fs.readFile(path.join(config.vaultResolved, '_Systems/sync-conflicts.md'), 'utf-8');
   assert.ok(log.includes('Local title') && log.includes('Google title'), log);
+  assert.ok(log.includes('local-only detail'), 'every field of the losing edit is in the log, not just the title');
 });
 
 test('a cancelled event we never had produces no note', async () => {

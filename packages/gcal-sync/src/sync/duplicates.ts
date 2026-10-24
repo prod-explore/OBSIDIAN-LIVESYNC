@@ -105,7 +105,7 @@ export async function setDuplicatesAside<N extends NoteFields>(
         await logConflict(
           ctx,
           loser.relative,
-          { title: loser.note.title, updated: loser.note.updated, mtime: new Date(loser.mtimeMs).toISOString() },
+          { ...loser.note, mtime: new Date(loser.mtimeMs).toISOString() },
           { keptInstead: winner.relative },
           `Same google_id as ${winner.relative}; the other copy was moved to ${target}`,
         );

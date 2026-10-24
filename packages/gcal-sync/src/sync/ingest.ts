@@ -180,7 +180,7 @@ async function ingestEvent(ctx: SyncContext, calId: string, event: calendar_v3.S
       await logConflict(
         ctx,
         existingFile,
-        { title: found.note.title, mtime: new Date(found.mtimeMs).toISOString() },
+        { ...found.raw, mtime: new Date(found.mtimeMs).toISOString() }, // the whole front matter, so nothing the edit set is lost
         { title: event.summary, updated: event.updated },
         'Google is newer (Last-Write-Wins)',
       );
@@ -334,7 +334,7 @@ async function ingestTask(ctx: SyncContext, list: TaskList, task: tasks_v1.Schem
       await logConflict(
         ctx,
         existingFile,
-        { title: found.note.title, mtime: new Date(found.mtimeMs).toISOString() },
+        { ...found.raw, mtime: new Date(found.mtimeMs).toISOString() }, // the whole front matter, so nothing the edit set is lost
         { title: task.title, updated: task.updated },
         'Google is newer (Last-Write-Wins)',
       );
