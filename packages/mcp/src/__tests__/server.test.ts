@@ -138,7 +138,7 @@ test('clients are pointed at the vault\'s own rules file by default; MCP_INSTRUC
   assert.equal(resolveInstructions({ MCP_INSTRUCTIONS: 'none' }), undefined);
 });
 
-test('a rejected request is logged with its path, and the token it carried never is', async () => {
+test('a rejected request is logged with its path, and the token it carried (query or header) never is', async () => {
   const written: string[] = [];
   const original = process.stderr.write.bind(process.stderr);
   process.stderr.write = ((chunk: string | Uint8Array) => (
@@ -147,6 +147,7 @@ test('a rejected request is logged with its path, and the token it carried never
   )) as typeof process.stderr.write;
   try {
     await fetch(`${base}/mcp/health?token=guess-1234`);
+    await fetch(`${base}/mcp/health`, { headers: { authorization: 'Bearer guess-5678' } });
     await fetch(`${base}/mcp/health`);
   } finally {
     process.stderr.write = original;
@@ -156,4 +157,5 @@ test('a rejected request is logged with its path, and the token it carried never
   assert.match(log, /Rejected a request: no token/);
   assert.match(log, /\/mcp\/health/);
   assert.ok(!log.includes('guess-1234'), 'the guessed token must not be in the log');
+  assert.ok(!log.includes('guess-5678'), 'nor the one sent as a Bearer header');
 });
