@@ -219,3 +219,25 @@ test('write_note will not create a note through a symbolic link that leads out, 
     await fs.rm(outside, { recursive: true, force: true });
   }
 });
+
+// ── One note at a time ──────────────────────────────────────────────────────
+
+test('delete_note, write_note and move_note refuse folders, so nothing is ever removed or moved recursively', async () => {
+  await h.write('bulk/Project/a.md', 'a');
+  await h.write('bulk/Project/b.md', 'b');
+  await h.write('bulk/single.md', 'single');
+
+  const attempts = {
+    'delete a folder': await h.call('delete_note', { path: 'bulk/Project' }),
+    'overwrite a folder': await h.call('write_note', { path: 'bulk/Project', content: 'x', overwrite: true }),
+    'move a folder': await h.call('move_note', { from: 'bulk/Project', to: 'bulk/Moved' }),
+    'move onto a folder': await h.call('move_note', { from: 'bulk/single.md', to: 'bulk/Project', overwrite: true }),
+  };
+  for (const [what, res] of Object.entries(attempts)) {
+    assert.equal(res.isError, true, `${what}: ${text(res)}`);
+    assert.match(text(res), /folder/, what);
+  }
+  assert.deepEqual(await h.files('bulk'), ['bulk/Project/a.md', 'bulk/Project/b.md', 'bulk/single.md']);
+  assert.equal(await h.exists('bulk/Moved'), false);
+  assert.ok(!(await trashed()).some((f) => f.startsWith('bulk__Project')));
+});

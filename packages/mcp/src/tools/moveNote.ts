@@ -15,6 +15,7 @@ import { updateBacklinks } from './refactorLinks.js';
  *
  * Safety choices, deliberately conservative for an agent-facing tool:
  * - Both `from` and `to` go through the same path-traversal guard as every other tool.
+ * - Only a note moves, never a folder, and nothing is ever moved onto a folder.
  * - Refuses to clobber an existing file at `to` unless `overwrite: true` is passed
  *   explicitly — an agent should have to state its intent to destroy something,
  *   not do it as a side effect of a typo'd destination path.
@@ -41,17 +42,17 @@ export function registerMoveNote(server: McpServer, { config }: ToolContext): vo
           return ok(`Source and destination are identical: ${from}. Nothing to do.`);
         }
 
-        await fs.access(fromPath).catch(() => {
+        const source = await fs.stat(fromPath).catch(() => {
           throw new Error(`Source note does not exist: ${from}`);
         });
+        // One note at a time: renaming a folder would move everything in it, and its links would not be rewritten.
+        if (!source.isFile()) return fail(`Not a note: ${from} is a folder; move the notes in it one by one`);
 
-        const destExists = await fs
-          .access(toPath)
-          .then(() => true)
-          .catch(() => false);
+        const dest = await fs.stat(toPath).catch(() => undefined);
         let trashedPath: string | undefined;
 
-        if (destExists) {
+        if (dest) {
+          if (!dest.isFile()) return fail(`Destination is a folder: ${to}; give the full path of the note`);
           if (!overwrite) {
             throw new Error(`Destination already exists: ${to} (pass overwrite: true to replace it)`);
           }

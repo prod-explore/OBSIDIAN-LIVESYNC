@@ -20,13 +20,12 @@ export function registerWriteNote(server: McpServer, { config }: ToolContext): v
       try {
         const fullPath = resolveVaultPath(config.vaultResolved, notePath);
 
-        const exists = await fs
-          .access(fullPath)
-          .then(() => true)
-          .catch(() => false);
+        const existing = await fs.stat(fullPath).catch(() => undefined);
         let trashedPath: string | undefined;
 
-        if (exists) {
+        if (existing) {
+          // Replacing a folder would send everything in it to the trash.
+          if (!existing.isFile()) return fail(`Not a note: ${notePath} is a folder`);
           if (!overwrite) {
             return fail(`Note already exists: ${notePath} (pass overwrite: true to replace it)`);
           }

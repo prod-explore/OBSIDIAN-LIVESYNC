@@ -13,8 +13,9 @@ import { ok, fail, ToolContext } from './types.js';
  * project should not hand an AI client. Moving to `.trash/` keeps the operation
  * useful while making it reversible: worst case, you go dig the file back out.
  *
- * Collisions (deleting the same relative path twice) are handled by suffixing
- * a timestamp — the second delete never overwrites the first one sitting in trash.
+ * Collisions (deleting the same relative path twice) are handled by prefixing
+ * a timestamp — the second delete does not overwrite the first one sitting in trash.
+ * Folders are refused: this tool never removes more than one file.
  */
 export function registerDeleteNote(server: McpServer, { config }: ToolContext): void {
   server.tool(
@@ -27,9 +28,11 @@ export function registerDeleteNote(server: McpServer, { config }: ToolContext): 
       try {
         const fullPath = resolveVaultPath(config.vaultResolved, notePath);
 
-        await fs.access(fullPath).catch(() => {
+        const stat = await fs.stat(fullPath).catch(() => {
           throw new Error(`Note does not exist: ${notePath}`);
         });
+        // One note at a time: a folder would take everything in it along.
+        if (!stat.isFile()) return fail(`Not a note: ${notePath} is a folder; delete the notes in it one by one`);
 
         const trashedPath = await moveToTrash(config.vaultResolved, config.trashDir, notePath);
         return ok(`Moved to trash: ${notePath} → ${trashedPath}`);
