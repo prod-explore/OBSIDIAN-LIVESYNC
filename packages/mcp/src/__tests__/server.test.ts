@@ -159,3 +159,30 @@ test('a rejected request is logged with its path, and the token it carried (quer
   assert.ok(!log.includes('guess-1234'), 'the guessed token must not be in the log');
   assert.ok(!log.includes('guess-5678'), 'nor the one sent as a Bearer header');
 });
+
+test('a malformed body is a JSON 400, logged without the body and without a stack trace', async () => {
+  const written: string[] = [];
+  const original = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => (
+    written.push(String(chunk)),
+    true
+  )) as typeof process.stderr.write;
+  let res: Response;
+  try {
+    res = await fetch(`${base}/mcp/sse?token=${KEY}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"jsonrpc": "2.0", "params": {"content": "BODY-TEXT-1234"',
+    });
+  } finally {
+    process.stderr.write = original;
+  }
+  assert.equal(res.status, 400);
+  assert.deepEqual(await res.json(), { error: 'Bad request body' });
+  const log = written.join('');
+  assert.match(log, /Rejected a request body/);
+  assert.match(log, /entity\.parse\.failed/);
+  assert.ok(!log.includes('BODY-TEXT-1234'), log);
+  assert.ok(!log.includes(KEY), log);
+  assert.ok(!/\n\s+at /.test(log), 'no stack trace');
+});

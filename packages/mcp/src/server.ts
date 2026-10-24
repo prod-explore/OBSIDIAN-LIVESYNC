@@ -227,5 +227,20 @@ export function createApp(config: Config): { app: express.Express; sseRegistry: 
     }),
   );
 
+  // express.json() rejects a malformed or oversized body before any route (or the token check) runs. Express's own
+  // handler would print a stack trace that can quote the body; this one logs the kind of failure and answers in JSON.
+  const bodyErrors: express.ErrorRequestHandler = (err: unknown, req, res, next) => {
+    if (res.headersSent) return next(err);
+    const { status, type } = (typeof err === 'object' && err !== null ? err : {}) as {
+      status?: unknown;
+      type?: unknown;
+    };
+    const code = typeof status === 'number' && status >= 400 && status < 500 ? status : 500;
+    if (code === 500) logger.error('Request failed', { method: req.method, path: req.path, error: errorMessage(err) });
+    else logger.warn('Rejected a request body', { status: code, method: req.method, path: req.path, type });
+    res.status(code).json({ error: code === 500 ? 'Internal server error' : 'Bad request body' });
+  };
+  app.use(bodyErrors);
+
   return { app, sseRegistry };
 }
