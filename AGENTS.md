@@ -77,10 +77,9 @@ to hand an agent:
 - **`append_note(path, text)`** — append without needing to read-then-write
   the whole file first. Lower risk than `write_note` since it can't
   accidentally truncate existing content; still needs the same path guard.
-- **Rate limiting on mutating endpoints** — not a tool, an infra addition.
-  Right now a compromised or malfunctioning client could write/delete in a
-  tight loop. Even a naive token-bucket in front of `write_note`/`delete_note`/
-  `move_note` would bound the damage.
+
+Already done: rate limiting of the tools that change the vault (`rateLimit.ts`,
+`MCP_WRITE_LIMIT_PER_MINUTE`). A new tool that writes must call `tooManyWrites(ctx)` first.
 
 Deliberately **not** on this list, and shouldn't be added without a real
 conversation about why: shell execution, permanent (non-trash) delete,

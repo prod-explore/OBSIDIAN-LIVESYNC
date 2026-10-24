@@ -10,7 +10,13 @@ All notable changes. Format after [Keep a Changelog](https://keepachangelog.com/
 - **Logs:** secret-named fields are masked at any depth, `client_secret=`/`refresh_token=` and other secret URL parameters and secret keys quoted in JSON text are masked, and a field that refers to itself no longer makes the logger throw.
 - `get-token` listens on `localhost` only.
 
+### Added
+- MCP: writes are rate limited (`MCP_WRITE_LIMIT_PER_MINUTE`, 120 by default, `0` = off): a client in a loop can no longer rewrite or trash a vault in seconds.
+- MCP: `MCP_BODY_LIMIT` (5 MB by default). The 100 kB default of Express made `write_note` fail on a larger note.
+- MCP: `edit_note` copies the note to `.trash/` before changing it.
+
 ### Changed
+- Sync: `_Systems/sync-conflicts.md` records the whole front matter of the edit that lost, not only its title and time.
 - MCP: a malformed or oversized request body is answered with JSON and one structured log line instead of Express's stack trace.
 - MCP: clients see the package version in `serverInfo` (it said 1.1.0); a port that cannot be bound is logged and ends the process cleanly.
 - Repository: SECURITY.md, .editorconfig, a CodeQL workflow; Dependabot groups image and Action updates and leaves Node majors to a decision.

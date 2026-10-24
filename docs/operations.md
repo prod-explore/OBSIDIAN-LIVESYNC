@@ -43,7 +43,7 @@ make those settings identical on every device and on the headless instance.
 - `delete_note`, and `write_note`/`move_note` with `overwrite`, move the old file into `.trash/` (name: timestamp + flattened
   path). Copy it back out on the host; the folder is hidden from the vault tree, folder listings and search, and no
   tool can read or write it (hidden paths such as `.trash/` and `.obsidian/` are refused).
-- `edit_note` rewrites a note in place without keeping the previous version. LiveSync's own history, or the backup, is the way back.
+- `edit_note` copies the note into `.trash/` before it changes it, under the same naming. LiveSync's own history, or the backup, is the way back for anything older.
 - The `.trash/` folder is never emptied by this project.
 
 ## Calendar & Tasks sync
@@ -91,7 +91,7 @@ make those settings identical on every device and on the headless instance.
   `Authorization` header wherever the client allows it, and rotate `MCP_API_KEY` if a log leaves the machine.
 - **Logs.** `docker logs obsidian-mcp`: JSON lines like the sync's. A request with a missing or wrong token is logged as a warning with
   its method, status and path (`LOG_LEVEL=error` silences it); so is a body that is not valid JSON or is larger than
-  express's default limit of 100 kB (`Rejected a request body`, with `type` saying which).
+  `MCP_BODY_LIMIT` (5 MB by default; a bigger one is answered with 413). Both are logged as `Rejected a request body`, with `type` saying which.
 - **Settings.** `MCP_API_KEY` (required), `VAULT_PATH`, `PORT` (3000), `TRASH_DIR` (`.trash`), `SSE_SESSION_MAX_AGE_MS` (1 h),
-  `SSE_SWEEP_INTERVAL_MS` (5 min), `LOG_LEVEL`, `MCP_INSTRUCTIONS` (the line sent to clients on connect; unset = a pointer to `_Systems/AGENTS.md`, `none` = nothing).
+  `SSE_SWEEP_INTERVAL_MS` (5 min), `MCP_BODY_LIMIT` (`5mb`), `MCP_WRITE_LIMIT_PER_MINUTE` (120 changes a minute for the whole server, `0` = no limit; a client over it gets an error that says how long to wait), `LOG_LEVEL`, `MCP_INSTRUCTIONS` (the line sent to clients on connect; unset = a pointer to `_Systems/AGENTS.md`, `none` = nothing).
 - **Rebuild after an update.** `docker compose up -d --build obsidian-mcp obsidian-gcal-sync`.
