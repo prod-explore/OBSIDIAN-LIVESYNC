@@ -1,6 +1,7 @@
 version: 2
 updates:
-  # Dependencies of both packages (one lockfile at the root).
+  # Both packages. They are npm workspaces with one lockfile at the root, so the root is the one directory
+  # Dependabot can update them from (a per-package entry would find no lockfile).
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -22,14 +23,33 @@ updates:
       - /packages/gcal-sync
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    groups:
+      base-images:
+        update-types: [minor, patch]
+    ignore:
+      # A new Node major (and the odd-numbered ones are never LTS) is a decision, together with engines and CI.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
 
   # Image tags in docker-compose.yml (only useful while they are pinned, see the comments there).
   - package-ecosystem: docker-compose
     directory: /
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    groups:
+      compose-images:
+        update-types: [minor, patch]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        update-types: [minor, patch]
