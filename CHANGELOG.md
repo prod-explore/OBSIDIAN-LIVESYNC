@@ -2,6 +2,20 @@
 
 All notable changes. Format after [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Security
+- **MCP: hidden paths are refused.** `resolveVaultPath()` refuses any path through a hidden file or folder, also behind a link. Before, `get_path` could read `.obsidian/plugins/obsidian-livesync/data.json` (the CouchDB password) and `write_note` could plant a plugin that headless Obsidian would run.
+- **MCP: one note at a time.** `delete_note`, `write_note` (with `overwrite`) and `move_note` refused nothing when given a folder and moved or trashed it whole; they now refuse folders.
+- **Logs:** secret-named fields are masked at any depth, `client_secret=`/`refresh_token=` and other secret URL parameters and secret keys quoted in JSON text are masked, and a field that refers to itself no longer makes the logger throw.
+- `get-token` listens on `localhost` only.
+
+### Changed
+- MCP: a malformed or oversized request body is answered with JSON and one structured log line instead of Express's stack trace.
+- MCP: clients see the package version in `serverInfo` (it said 1.1.0); a port that cannot be bound is logged and ends the process cleanly.
+- Repository: SECURITY.md, .editorconfig, a CodeQL workflow; Dependabot groups image and Action updates and leaves Node majors to a decision.
+- README: a one-minute local try-out of the MCP server, real test counts, the quick start starts the Google sync only once it is configured.
+
 ## [1.0.0] - 2026-10-22
 
 The first tagged release: three parts (LiveSync, the MCP server, the Google Calendar & Tasks sync) in one npm workspace.
