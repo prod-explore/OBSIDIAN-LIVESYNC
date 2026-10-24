@@ -28,7 +28,9 @@ reads, and it will not double-check itself the way a person would.
 - **Every path parameter goes through `resolveVaultPath()`.** No new tool
   gets to touch the filesystem with a raw `path.join`/`path.resolve` on
   user-supplied input. This is the one guard that keeps every tool inside
-  the vault; skipping it once defeats the point of having it anywhere.
+  the vault; skipping it once defeats the point of having it anywhere. It
+  also refuses hidden paths (`.obsidian/`, `.trash/`); `allowHidden` is only
+  for paths from the server's own config, never from a client.
 - **No destructive operation without a recovery path.** `delete_note` moves
   to `.trash/` instead of calling `unlink`, on purpose. If you add a tool
   that removes or overwrites something, it needs the same property —
@@ -53,7 +55,7 @@ reads, and it will not double-check itself the way a person would.
 ## Adding a new tool — the pattern
 
 1. New file in `src/tools/`, one tool per file, mirroring the existing ones
-   (`readNote.ts`, `moveNote.ts`, etc.).
+   (`getPath.ts`, `moveNote.ts`, etc.).
 2. Export a `registerX(server, { config }: ToolContext)` function.
 3. Use `ok()` / `fail()` from `tools/types.ts` for the return shape — don't
    hand-roll the `{ content: [...] }` object inline.
@@ -61,8 +63,9 @@ reads, and it will not double-check itself the way a person would.
 5. Document it in `README.md` under "MCP Tools" with the same format as the
    others (one-line description + example arguments).
 6. If it touches the filesystem, write the traversal test case in
-   `__tests__/` alongside the existing ones — copy the pattern from
-   `security.test.ts` rather than inventing a new style.
+   `__tests__/` alongside the existing ones — unit cases in `security.test.ts`,
+   tool-level cases through `harness.ts` (see `getPath.test.ts`) rather than
+   inventing a new style.
 
 ## Tool roadmap — things worth adding later
 

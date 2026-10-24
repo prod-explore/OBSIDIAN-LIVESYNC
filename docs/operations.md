@@ -41,7 +41,8 @@ make those settings identical on every device and on the headless instance.
 ## Recovering notes
 
 - `delete_note`, and `write_note`/`move_note` with `overwrite`, move the old file into `.trash/` (name: timestamp + flattened
-  path). Copy it back out; the folder is hidden from the vault tree, folder listings and search.
+  path). Copy it back out on the host; the folder is hidden from the vault tree, folder listings and search, and no
+  tool can read or write it (hidden paths such as `.trash/` and `.obsidian/` are refused).
 - `edit_note` rewrites a note in place without keeping the previous version. LiveSync's own history, or the backup, is the way back.
 - The `.trash/` folder is never emptied by this project.
 
@@ -58,12 +59,13 @@ make those settings identical on every device and on the headless instance.
   read at all (broken YAML), the sync deletes nothing on Google, because a note it cannot read looks the same as a deleted one.
 - **Duplicates.** Two notes with the same `google_id` are reduced to one: the one changed last stays, the other is moved to
   `_Systems/duplicates/<time>-<path>` and entered in `_Systems/sync-conflicts.md`. Look there before deleting the folder.
-- **Cancelled notes.** `CANCELLED_RETENTION_DAYS` (default 30, `0` = keep for ever): a cancelled note with an empty body, not
-  touched for that long, is removed. The count of removed notes is in the log and in `status.json` (`removedCancelled`).
+- **Cancelled notes.** `CANCELLED_RETENTION_DAYS` (default 30, `0` = keep for ever): a cancelled note with an empty body, no
+  local edit waiting and a Google `updated` date older than that, is removed (deleted from disk, not moved). The count of removed notes is in the log and in `status.json` (`removedCancelled`).
 - **Mass-deletion guard.** When most of a list's notes disappear from the vault in a single cycle (more than five, and more
   than half of what the sync knows about), the sync deletes nothing on Google and logs
-  `Refusing to delete N of M known tasks in <list> ...` (and counts it as an error, so the health check turns red). That pattern is what an unmounted volume or a LiveSync fetch in progress
-  looks like. If the deletion was intended, set `ALLOW_MASS_DELETE=true` in `.env`, run `docker compose up -d obsidian-gcal-sync`,
+  `Refusing to delete N of M known tasks in <list> ...` and counts it as an error. The cycle then does not count as a
+  success, so once that has lasted past the health limit (three polls plus five minutes) the health check turns red.
+  That pattern is what an unmounted volume or a LiveSync fetch in progress looks like. If the deletion was intended, set `ALLOW_MASS_DELETE=true` in `.env`, run `docker compose up -d obsidian-gcal-sync`,
   wait one cycle, then remove the variable. Google Tasks has no undo for a deleted task.
 - **State file.** `sync-state.json` is written atomically. If it is ever unreadable as JSON it is renamed to
   `sync-state.json.corrupt-<timestamp>` and the next cycle starts from an empty state (a full re-sync); a file that cannot be
@@ -77,6 +79,9 @@ make those settings identical on every device and on the headless instance.
 
 ## MCP server
 
+- **What a client can reach.** Only files and folders inside the vault whose path has no hidden part: `..`, absolute paths,
+  links that lead out or into a hidden folder, `.obsidian/` and `.trash/` are refused. Only one note at a time is written,
+  moved or deleted; a folder is refused.
 - **Health.** `GET /mcp/health` (with the token) reports `status`, the vault path, whether it exists and the number of open SSE
   sessions. The image's `HEALTHCHECK` calls it, so `docker ps` shows `healthy`.
 - **Token in the URL.** Some clients can only configure a URL (the "custom connector" form of Claude has just a name and a URL),
@@ -85,7 +90,8 @@ make those settings identical on every device and on the headless instance.
   only for `/mcp/`. nginx's error log still prints the full request line when an upstream error happens, so prefer the
   `Authorization` header wherever the client allows it, and rotate `MCP_API_KEY` if a log leaves the machine.
 - **Logs.** `docker logs obsidian-mcp`: JSON lines like the sync's. A request with a missing or wrong token is logged as a warning with
-  its method, status and path (`LOG_LEVEL=error` silences it).
+  its method, status and path (`LOG_LEVEL=error` silences it); so is a body that is not valid JSON or is larger than
+  express's default limit of 100 kB (`Rejected a request body`, with `type` saying which).
 - **Settings.** `MCP_API_KEY` (required), `VAULT_PATH`, `PORT` (3000), `TRASH_DIR` (`.trash`), `SSE_SESSION_MAX_AGE_MS` (1 h),
   `SSE_SWEEP_INTERVAL_MS` (5 min), `LOG_LEVEL`, `MCP_INSTRUCTIONS` (the line sent to clients on connect; unset = a pointer to `_Systems/AGENTS.md`, `none` = nothing).
 - **Rebuild after an update.** `docker compose up -d --build obsidian-mcp obsidian-gcal-sync`.
