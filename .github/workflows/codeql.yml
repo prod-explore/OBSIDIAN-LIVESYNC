@@ -25,7 +25,7 @@ jobs:
         # TypeScript is analysed from source (no build needed); the workflows are checked as well.
         language: [javascript-typescript, actions]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
