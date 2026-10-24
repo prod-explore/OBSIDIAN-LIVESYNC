@@ -19,12 +19,12 @@ npm-debug.log*
 data/
 config/
 vault/
+# The folder the README's local try-out creates
+demo-vault/
 
 # Logs
 *.log
 *.log.*
-
-
 
 # Test coverage reports
 coverage/
