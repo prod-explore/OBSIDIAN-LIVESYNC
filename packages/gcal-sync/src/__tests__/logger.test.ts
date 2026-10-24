@@ -105,3 +105,49 @@ test('LOG_LEVEL and LOG_FORMAT come from the environment; a bad level falls back
     ['shown', 'shown too'],
   );
 });
+
+test('secret-named fields are masked at any depth, inside objects and arrays', () => {
+  for (const format of ['json', 'text'] as const) {
+    const { log, lines } = capture({ format });
+    log.error('request failed', {
+      request: { url: '/x', headers: { authorization: 'Basic QUJD', accept: 'json' }, password: 'p4ss' },
+      attempts: [{ clientSecret: 's3c', n: 1 }],
+    });
+    const line = lines[0].line;
+    for (const secret of ['QUJD', 'p4ss', 's3c']) assert.ok(!line.includes(secret), `${format}: ${line}`);
+    assert.match(line, /accept/);
+  }
+  const { log, lines } = capture();
+  log.info('x', { request: { headers: { authorization: 'a' } }, when: new Date(0) });
+  const entry = JSON.parse(lines[0].line);
+  assert.deepEqual(entry.request, { headers: { authorization: '[redacted]' } });
+  assert.equal(entry.when, '1970-01-01T00:00:00.000Z', 'a date is still written as a date');
+});
+
+test('OAuth parameters in a URL and secret keys quoted in JSON text are masked', () => {
+  for (const format of ['json', 'text'] as const) {
+    const { log, lines } = capture({ format });
+    log.error('POST https://oauth2.example.org/token?client_secret=CS1&refresh_token=RT1&grant_type=refresh', {
+      body: 'Google said {"error":"invalid_grant","access_token":"AT2","refresh_token":"RT2"}',
+    });
+    const line = lines[0].line;
+    for (const secret of ['CS1', 'RT1', 'AT2', 'RT2']) assert.ok(!line.includes(secret), `${format}: ${line}`);
+    assert.match(line, /grant_type=refresh/);
+    assert.match(line, /invalid_grant/);
+  }
+  assert.equal(
+    redact('{"access_token": "abc", "expires_in": 3599}'),
+    '{"access_token": "[redacted]", "expires_in": 3599}',
+  );
+});
+
+test('a field that refers back to itself is written as [circular] instead of making the logger throw', () => {
+  const { log, lines } = capture();
+  const loop: Record<string, unknown> = { name: 'loop' };
+  loop.self = loop;
+  log.info('cyclic', { loop, twice: [loop, loop] });
+  const entry = JSON.parse(lines[0].line);
+  assert.equal(entry.loop.self, '[circular]');
+  assert.equal(entry.twice[0].name, 'loop', 'the same object twice side by side is not a cycle');
+  assert.equal(entry.twice[1].name, 'loop');
+});

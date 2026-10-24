@@ -38,30 +38,48 @@ function levelFrom(value: string | undefined): LogLevel {
 
 /**
  * Secrets never reach a log. The MCP server accepts its token in the URL (`?token=…`) because some clients cannot
- * send a header, so a URL or an error message can carry one; fields named like a secret are masked outright.
+ * send a header, so a URL or an error message can carry one; fields named like a secret are masked outright, at any
+ * depth, and so are secret-named keys inside JSON text (an error that quotes a response body).
  */
-const URL_SECRET = /([?&](?:token|access_token|api_key|apikey|key)=)[^&\s"'\\]+/gi;
+const SECRET_NAME = String.raw`[\w-]*(?:token|secret|password|passwd)|api[-_]?key|apikey|key|authorization`;
+const URL_SECRET = new RegExp(String.raw`([?&](?:${SECRET_NAME})=)[^&\s"'\\]+`, 'gi');
+const JSON_SECRET = new RegExp(String.raw`(\\?"(?:${SECRET_NAME})\\?"\s*:\s*\\?")(?:[^"\\]|\\[^"])*`, 'gi');
 const BEARER = /(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi;
 const SECRET_FIELD = /token|secret|password|passwd|authorization|api[-_]?key|cookie/i;
 
 export function redact(text: string): string {
-  return text.replace(URL_SECRET, '$1[redacted]').replace(BEARER, '$1[redacted]');
+  return text.replace(URL_SECRET, '$1[redacted]').replace(JSON_SECRET, '$1[redacted]').replace(BEARER, '$1[redacted]');
 }
 
-/** Errors become `{ name, message, code }`; everything else is left to JSON. */
-function plain(value: unknown): unknown {
+/**
+ * Errors become `{ name, message, code }`; plain objects and arrays are walked so a secret-named field is masked at
+ * any depth, and a reference back up the structure becomes "[circular]" instead of making the logger throw.
+ * Everything else (dates, numbers, strings) is left to JSON.
+ */
+function plain(value: unknown, parents: object[] = []): unknown {
   if (value instanceof Error) {
     const { code } = value as Error & { code?: unknown };
     return { name: value.name, message: value.message, ...(code !== undefined ? { code } : {}) };
   }
-  return value;
+  if (typeof value !== 'object' || value === null) return value;
+  if (parents.includes(value)) return '[circular]';
+  const inside = [...parents, value];
+  if (Array.isArray(value)) return value.map((item: unknown) => plain(item, inside));
+  const proto: unknown = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
+  return cleanFields(value as Fields, inside);
+}
+
+function cleanFields(fields: Fields, parents: object[] = []): Fields {
+  const cleaned: Fields = {};
+  for (const [key, value] of Object.entries(fields))
+    cleaned[key] = SECRET_FIELD.test(key) ? '[redacted]' : plain(value, parents);
+  return cleaned;
 }
 
 function formatLine(format: LogFormat, level: string, message: string, fields: Fields): string {
   const time = new Date().toISOString();
-  const cleaned: Fields = {};
-  for (const [key, value] of Object.entries(fields))
-    cleaned[key] = SECRET_FIELD.test(key) ? '[redacted]' : plain(value);
+  const cleaned = cleanFields(fields);
 
   if (format === 'json') return redact(JSON.stringify({ time, level, msg: message, ...cleaned }));
 
