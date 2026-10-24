@@ -6,7 +6,7 @@ All notable changes. Format after [Keep a Changelog](https://keepachangelog.com/
 
 ### Security
 - **MCP: hidden paths are refused.** `resolveVaultPath()` refuses any path through a hidden file or folder, also behind a link. Before, `get_path` could read `.obsidian/plugins/obsidian-livesync/data.json` (the CouchDB password) and `write_note` could plant a plugin that headless Obsidian would run.
-- **MCP: one note at a time.** `delete_note`, `write_note` (with `overwrite`) and `move_note` refused nothing when given a folder and moved or trashed it whole; they now refuse folders.
+- **MCP: one note at a time.** `delete_note`, `write_note` (with `overwrite`) and `move_note` accepted a folder and trashed or moved it whole; they now refuse folders.
 - **Logs:** secret-named fields are masked at any depth, `client_secret=`/`refresh_token=` and other secret URL parameters and secret keys quoted in JSON text are masked, and a field that refers to itself no longer makes the logger throw.
 - `get-token` listens on `localhost` only.
 
