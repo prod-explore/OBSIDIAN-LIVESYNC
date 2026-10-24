@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "dotenv": "^18.0.9",
-    "googleapis": "^186.0.0",
+    "googleapis": "^187.0.0",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.0",
     "node-cron": "^4.6.0"
