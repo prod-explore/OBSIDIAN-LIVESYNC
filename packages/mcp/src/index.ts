@@ -15,6 +15,12 @@ function start(config: Config): void {
     void ensureVault(config);
   });
 
+  // A port that is taken (or not allowed) arrives here, not as an exception: say so in one line and stop.
+  httpServer.on('error', (err) => {
+    logger.error('Cannot listen', { port: config.port, error: errorMessage(err) });
+    process.exit(1);
+  });
+
   function shutdown(signal: string): void {
     logger.info('Shutting down', { signal });
     httpServer.close(() => {
