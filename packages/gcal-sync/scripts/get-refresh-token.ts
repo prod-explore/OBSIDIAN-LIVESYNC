@@ -1,6 +1,5 @@
 import { google } from 'googleapis';
 import * as http from 'http';
-import * as url from 'url';
 import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
 
@@ -36,16 +35,18 @@ console.log('====================================================\n');
 const server = http.createServer(async (req, res) => {
   try {
     if (req.url && req.url.startsWith('/oauth2callback')) {
-      const q = url.parse(req.url, true).query;
-      if (q.error) {
-        console.error('Error returned from Google:', q.error);
+      const q = new URL(req.url, REDIRECT_URI).searchParams;
+      const error = q.get('error');
+      if (error) {
+        console.error('Error returned from Google:', error);
         res.end('Error! Check terminal.');
         process.exit(1);
       }
 
-      if (q.code) {
+      const code = q.get('code');
+      if (code) {
         console.log('Authorization code received, exchanging for tokens...');
-        const { tokens } = await oauth2Client.getToken(q.code as string);
+        const { tokens } = await oauth2Client.getToken(code);
 
         console.log('\n=== SUCCESS! Copy the token below to your .env ===\n');
         console.log(`GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}`);
@@ -67,6 +68,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(3000, () => {
+// Loopback only: the redirect comes from this machine's browser, and nobody else on the network needs to reach it.
+server.listen(3000, 'localhost', () => {
   console.log('Listening on http://localhost:3000/oauth2callback for the redirect...');
 });
