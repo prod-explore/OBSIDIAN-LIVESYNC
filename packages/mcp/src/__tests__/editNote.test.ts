@@ -121,12 +121,7 @@ test('fails when note does not exist', async () => {
 });
 
 test('blocks path traversal', async () => {
-  try {
-    const res = await call({ path: '../../etc/passwd', start_line: 1, end_line: 1, new_content: 'x' });
-    // If resolveVaultPath didn't throw, the tool should still fail
-    assert.equal(res.isError, true);
-  } catch (err) {
-    // resolveVaultPath threw PathTraversalError — that's also correct
-    assert.match(err instanceof Error ? err.message : String(err), /traversal|outside|vault/i);
-  }
+  const res = await call({ path: '../../etc/passwd', start_line: 1, end_line: 1, new_content: 'x' });
+  assert.equal(res.isError, true);
+  assert.match(res.content[0].text, /traversal/i);
 });
