@@ -63,11 +63,11 @@ export function registerVaultTree(server: McpServer, { config }: ToolContext): v
  * Recursively walks `dirPath`, appending classic tree-style lines to `lines`.
  *
  *   01-Projects/
- *   ├── README.md
- *   ├── Projekt A/
- *   │   ├── Notatka.md
- *   │   └── Plik.md
- *   └── Projekt B/
+ *   ├── Project A/
+ *   │   ├── Notes.md
+ *   │   └── Plan.md
+ *   ├── Project B/
+ *   └── README.md
  *
  * Skips dotfiles/dotdirs and symlinks. Directories are listed before files
  * within each level for consistent visual grouping.

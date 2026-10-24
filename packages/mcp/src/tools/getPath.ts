@@ -56,7 +56,7 @@ export function registerGetPath(server: McpServer, { config }: ToolContext): voi
           return ok(lines.join('\n'));
         }
 
-        // File (or symlink to file — resolveVaultPath already guards traversal)
+        // A file, or a link to one that resolveVaultPath has checked stays inside the vault.
         if (stat.isFile()) {
           const content = await fs.readFile(fullPath, 'utf-8');
           return ok(content);
@@ -67,8 +67,8 @@ export function registerGetPath(server: McpServer, { config }: ToolContext): voi
         if (isFileMissing(err)) {
           return fail(`Path not found: ${inputPath}`);
         }
-        // Re-throw PathTraversalError and other unexpected errors so they're
-        // surfaced as tool errors rather than silently swallowed.
+        // A refused path (PathTraversalError, HiddenPathError) and anything unexpected reach the client as a
+        // tool error with its message, not as a silent empty result.
         return fail(`Error accessing path: ${errorMessage(err)}`);
       }
     },
