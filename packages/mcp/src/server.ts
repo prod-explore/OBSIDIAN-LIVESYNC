@@ -3,15 +3,19 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import * as fs from 'fs/promises';
+import { createRequire } from 'module';
 import { Config } from './config.js';
 import { errorMessage } from './errors.js';
 import { logger } from './logger.js';
 import { registerAllTools } from './tools/index.js';
 import { tokensMatch } from './security.js';
 
+/** What clients see in `serverInfo`: the package's own version, so the two cannot drift apart. */
+export const SERVER_VERSION = (createRequire(import.meta.url)('../package.json') as { version: string }).version;
+
 function createMcpServer(config: Config): McpServer {
   const server = new McpServer(
-    { name: 'Obsidian Headless MCP', version: '1.1.0' },
+    { name: 'Obsidian Headless MCP', version: SERVER_VERSION },
     config.instructions ? { instructions: config.instructions } : {},
   );
   registerAllTools(server, config);

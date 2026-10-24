@@ -186,3 +186,28 @@ test('a malformed body is a JSON 400, logged without the body and without a stac
   assert.ok(!log.includes(KEY), log);
   assert.ok(!/\n\s+at /.test(log), 'no stack trace');
 });
+
+test('the server introduces itself with the version in package.json', async () => {
+  const { version } = JSON.parse(await fs.readFile(new URL('../../package.json', import.meta.url), 'utf-8')) as {
+    version: string;
+  };
+  const res = await fetch(`${base}/mcp/sse`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${KEY}`,
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '0' } },
+    }),
+  });
+  assert.equal(res.status, 200);
+  const raw = await res.text();
+  const payload = raw.split('\n').find((l) => l.startsWith('data:'));
+  const message = JSON.parse(payload ? payload.slice(5) : raw) as { result: { serverInfo: { version: string } } };
+  assert.equal(message.result.serverInfo.version, version);
+});
