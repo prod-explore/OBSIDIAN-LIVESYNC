@@ -69,7 +69,7 @@ async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info('Shutting down', { signal });
-  cronTask?.stop();
+  await cronTask?.stop(); // node-cron 4 may answer with a promise
   if (currentCycle) {
     log.info('Waiting for the running sync cycle to finish');
     await Promise.race([currentCycle, new Promise((resolve) => setTimeout(resolve, SHUTDOWN_WAIT_MS))]);

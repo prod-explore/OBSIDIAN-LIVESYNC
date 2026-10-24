@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
 
 // Load variables from .env if present
-dotenv.config({ path: fileURLToPath(new URL('../../../.env', import.meta.url)) });
+dotenv.config({ path: fileURLToPath(new URL('../../../.env', import.meta.url)), quiet: true });
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'MISSING_CLIENT_ID';
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'MISSING_CLIENT_SECRET';
