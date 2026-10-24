@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveVaultPath, tokensMatch, PathTraversalError } from '../security.js';
+import { resolveVaultPath, tokensMatch, PathTraversalError, HiddenPathError } from '../security.js';
 
 import * as fs from 'fs';
 import * as os from 'os';
@@ -34,6 +34,30 @@ test('resolveVaultPath does not false-positive on a sibling folder with a shared
   // "/vault-other" starts with "/vault" as a raw string, but is not inside "/vault" —
   // the trailing path.sep check in resolveVaultPath exists specifically to catch this.
   assert.throws(() => resolveVaultPath(VAULT_ROOT, '../vault-other/secret.md'), PathTraversalError);
+});
+
+test('resolveVaultPath refuses hidden files and folders anywhere in the path', () => {
+  for (const hidden of [
+    '.obsidian/plugins/obsidian-livesync/data.json',
+    '.obsidian',
+    '.trash/2026-01-01__Note.md',
+    'Folder/.hidden/Note.md',
+    'Folder/.env',
+  ]) {
+    assert.throws(() => resolveVaultPath(VAULT_ROOT, hidden), HiddenPathError, hidden);
+  }
+});
+
+test('resolveVaultPath allows dots that do not make a segment hidden', () => {
+  assert.equal(resolveVaultPath(VAULT_ROOT, 'v1.2 notes.md'), path.join(VAULT_ROOT, 'v1.2 notes.md'));
+  assert.equal(resolveVaultPath(VAULT_ROOT, 'Folder/./Note.md'), path.join(VAULT_ROOT, 'Folder/Note.md'));
+  // ".." that stays inside is resolved away before the check.
+  assert.equal(resolveVaultPath(VAULT_ROOT, 'Folder/../Note.md'), path.join(VAULT_ROOT, 'Note.md'));
+});
+
+test('resolveVaultPath lets the server itself name a hidden folder (the trash) when it says so', () => {
+  assert.equal(resolveVaultPath(VAULT_ROOT, '.trash', { allowHidden: true }), path.join(VAULT_ROOT, '.trash'));
+  assert.throws(() => resolveVaultPath(VAULT_ROOT, '../.trash', { allowHidden: true }), PathTraversalError);
 });
 
 test('tokensMatch accepts matching tokens', () => {
@@ -100,6 +124,19 @@ test('resolveVaultPath blocks a link nested behind a link that stays inside', ()
     fs.symlinkSync(s.outside, path.join(s.vault, 'Notes', 'out'));
     fs.symlinkSync(path.join(s.vault, 'Notes'), path.join(s.vault, 'alias'));
     assert.throws(() => resolveVaultPath(s.vault, 'alias/out/secret.md'), PathTraversalError);
+  } finally {
+    s.done();
+  }
+});
+
+test('resolveVaultPath blocks a visible symlink that leads into a hidden folder', () => {
+  const s = makeSandbox();
+  try {
+    fs.mkdirSync(path.join(s.vault, '.obsidian'));
+    fs.writeFileSync(path.join(s.vault, '.obsidian', 'data.json'), '{"password":"x"}');
+    fs.symlinkSync(path.join(s.vault, '.obsidian'), path.join(s.vault, 'settings'));
+    assert.throws(() => resolveVaultPath(s.vault, 'settings/data.json'), HiddenPathError);
+    assert.throws(() => resolveVaultPath(s.vault, 'settings'), HiddenPathError);
   } finally {
     s.done();
   }

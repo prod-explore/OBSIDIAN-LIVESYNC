@@ -10,8 +10,30 @@ export class PathTraversalError extends Error {
   }
 }
 
+/**
+ * Hidden files and folders are not part of the notes: `.obsidian/` holds the app's settings, plugin code and the
+ * LiveSync plugin's CouchDB credentials, `.trash/` holds what was deleted. An agent that can read the first can leak
+ * a password; one that can write it can install a plugin, which is code that headless Obsidian runs.
+ */
+export class HiddenPathError extends Error {
+  constructor(attemptedPath: string) {
+    super(`Security Error: hidden files and folders are not reachable through this server ("${attemptedPath}").`);
+    this.name = 'HiddenPathError';
+  }
+}
+
+export interface ResolveOptions {
+  /** Only for paths that come from the server's own configuration (the trash folder), never from a client. */
+  allowHidden?: boolean;
+}
+
 function isInside(root: string, target: string): boolean {
   return target === root || target.startsWith(root + path.sep);
+}
+
+/** Does the path (relative to the vault root) pass through a hidden file or folder? */
+function isHidden(relative: string): boolean {
+  return relative.split(path.sep).some((segment) => segment.startsWith('.'));
 }
 
 /**
@@ -22,9 +44,9 @@ function isInside(root: string, target: string): boolean {
  * Walk the path one component at a time and look at what is really on disk. Components
  * that do not exist yet (a note about to be created) are fine; a link that points inside
  * the vault is fine; a link that points outside, or nowhere (a dangling link would be
- * *created* through by a write), is not.
+ * *created* through by a write), is not, and neither is one into a hidden folder.
  */
-function assertNoSymlinkEscape(vaultRoot: string, resolved: string, attempted: string): void {
+function assertNoSymlinkEscape(vaultRoot: string, resolved: string, attempted: string, allowHidden: boolean): void {
   let rootReal: string;
   try {
     rootReal = fs.realpathSync(vaultRoot);
@@ -51,6 +73,8 @@ function assertNoSymlinkEscape(vaultRoot: string, resolved: string, attempted: s
       throw new PathTraversalError(attempted); // dangling link
     }
     if (!isInside(rootReal, real)) throw new PathTraversalError(attempted);
+    // `notes -> .obsidian` stays inside the vault and would otherwise be a way round the hidden-path rule.
+    if (!allowHidden && isHidden(path.relative(rootReal, real))) throw new HiddenPathError(attempted);
   }
 }
 
@@ -58,14 +82,19 @@ function assertNoSymlinkEscape(vaultRoot: string, resolved: string, attempted: s
  * Resolves a vault-relative path and guarantees the result stays inside vaultRoot,
  * both lexically and after following symbolic links.
  * Throws PathTraversalError for anything that would escape the vault
- * (e.g. "../../etc/passwd", an absolute path like "/etc/passwd", or a link that leads out).
+ * (e.g. "../../etc/passwd", an absolute path like "/etc/passwd", or a link that leads out),
+ * and HiddenPathError for a path through a hidden file or folder such as `.obsidian/`.
  */
-export function resolveVaultPath(vaultRoot: string, relativePath: string): string {
+export function resolveVaultPath(vaultRoot: string, relativePath: string, options: ResolveOptions = {}): string {
   const resolved = path.resolve(vaultRoot, relativePath);
   if (!isInside(vaultRoot, resolved)) {
     throw new PathTraversalError(relativePath);
   }
-  assertNoSymlinkEscape(vaultRoot, resolved, relativePath);
+  const allowHidden = options.allowHidden ?? false;
+  if (!allowHidden && isHidden(path.relative(vaultRoot, resolved))) {
+    throw new HiddenPathError(relativePath);
+  }
+  assertNoSymlinkEscape(vaultRoot, resolved, relativePath, allowHidden);
   return resolved;
 }
 

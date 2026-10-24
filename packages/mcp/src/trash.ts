@@ -9,7 +9,7 @@ import { resolveVaultPath } from './security.js';
  */
 export async function moveToTrash(vaultRoot: string, trashDir: string, notePathRelative: string): Promise<string> {
   const fullPath = resolveVaultPath(vaultRoot, notePathRelative);
-  const trashRoot = resolveVaultPath(vaultRoot, trashDir);
+  const trashRoot = resolveVaultPath(vaultRoot, trashDir, { allowHidden: true });
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   // Flatten the path for the trash directory (e.g. "Folder/Note.md" -> "Folder__Note.md")

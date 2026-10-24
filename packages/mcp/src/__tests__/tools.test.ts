@@ -1,7 +1,8 @@
-// write_note, delete_note, move_note, get_path and get_vault_tree against a real (temporary) vault.
+// write_note, edit_note, delete_note, move_note, get_path and get_vault_tree against a real (temporary) vault.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
+import * as os from 'os';
 import * as path from 'path';
 import { makeHarness, text, type Harness } from './harness.js';
 
@@ -176,4 +177,45 @@ test('get_vault_tree: the vault root, a file, a missing folder', async () => {
   const missing = await h.call('get_vault_tree', { path: 'no/such/folder' });
   assert.equal(missing.isError, true);
   assert.match(text(missing), /Path not found/);
+});
+
+// ── The path guard on writes ────────────────────────────────────────────────
+
+test('no tool writes, edits, moves or deletes inside a hidden folder such as .obsidian or the trash', async () => {
+  await h.write('.obsidian/community-plugins.json', '["obsidian-livesync"]');
+  await h.write('guard/Note.md', 'note');
+
+  const attempts = [
+    h.call('write_note', { path: '.obsidian/plugins/evil/main.js', content: 'require("child_process")' }),
+    h.call('write_note', { path: '.obsidian/community-plugins.json', content: '["evil"]', overwrite: true }),
+    h.call('edit_note', { path: '.obsidian/community-plugins.json', start_line: 1, end_line: 1, new_content: '[]' }),
+    h.call('delete_note', { path: '.obsidian/community-plugins.json' }),
+    h.call('move_note', { from: 'guard/Note.md', to: '.obsidian/plugins/evil/main.js' }),
+    h.call('move_note', { from: '.obsidian/community-plugins.json', to: 'guard/plugins.md' }),
+    h.call('write_note', { path: '.trash/planted.md', content: 'x' }),
+  ];
+  for (const res of await Promise.all(attempts)) {
+    assert.equal(res.isError, true, text(res));
+    assert.match(text(res), /hidden/i);
+  }
+  assert.equal(await h.read('.obsidian/community-plugins.json'), '["obsidian-livesync"]');
+  assert.equal(await h.exists('.obsidian/plugins'), false);
+  assert.equal(await h.read('guard/Note.md'), 'note');
+  assert.equal(await h.exists('.trash/planted.md'), false);
+});
+
+test('write_note will not create a note through a symbolic link that leads out, or dangles', async () => {
+  const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'obs-outside-'));
+  try {
+    await fs.symlink(outside, path.join(h.vault, 'out-link'));
+    await fs.symlink(path.join(outside, 'planted.md'), path.join(h.vault, 'dangling.md'));
+    for (const target of ['out-link/planted.md', 'dangling.md']) {
+      const res = await h.call('write_note', { path: target, content: 'x', overwrite: true });
+      assert.equal(res.isError, true, text(res));
+      assert.match(text(res), /traversal/i);
+    }
+    assert.deepEqual(await fs.readdir(outside), []);
+  } finally {
+    await fs.rm(outside, { recursive: true, force: true });
+  }
 });
