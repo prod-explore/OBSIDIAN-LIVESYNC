@@ -25,7 +25,7 @@ export async function updateBacklinks(vaultRoot: string, oldRelPath: string, new
   const oldName = path.basename(oldRelPath, '.md');
   const newName = path.basename(newRelPath, '.md');
 
-  // Normalize paths to forward slashes for link matching
+  // Links always use forward slashes, whatever the platform's separator.
   const oldRelPathForward = oldRelPath.replace(/\\/g, '/');
   const newRelPathForward = newRelPath.replace(/\\/g, '/');
   const stripMd = (p: string) => (p.endsWith('.md') ? p.slice(0, -3) : p);
@@ -86,7 +86,7 @@ export async function updateBacklinks(vaultRoot: string, oldRelPath: string, new
 async function getAllMdFiles(dir: string, fileList: string[] = []): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue; // skip .trash, .obsidian, .git
+    if (entry.name.startsWith('.')) continue; // hidden folders (.obsidian, the trash) hold no notes to rewrite
 
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {

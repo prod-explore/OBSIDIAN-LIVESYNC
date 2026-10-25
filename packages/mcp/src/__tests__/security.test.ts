@@ -72,7 +72,7 @@ test('tokensMatch handles tokens of different lengths without throwing', () => {
   assert.equal(tokensMatch('short', 'a-much-longer-expected-key'), false);
 });
 
-// ── Symbolic links ──────────────────────────────────────────────────────────
+// Symbolic links: each test builds a vault and a folder outside it, in a fresh temporary directory.
 
 function makeSandbox() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'obs-sec-'));

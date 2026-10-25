@@ -2,9 +2,9 @@ import { Config } from '../config.js';
 import type { WriteLimiter } from '../rateLimit.js';
 
 /**
- * Standard MCP tool result shape returned by every tool handler in this project.
- * The index signature matches the SDK's own (wider) CallToolResult type, which
- * allows arbitrary extra fields — without it, TS rejects this as too narrow.
+ * The result every tool handler returns: one text block, flagged as an error when the call failed.
+ * The index signature matches the SDK's CallToolResult, which allows extra fields; without it the compiler rejects
+ * this type as too narrow for a handler's return value.
  */
 export interface ToolTextResult {
   [key: string]: unknown;
@@ -12,10 +12,12 @@ export interface ToolTextResult {
   isError?: boolean;
 }
 
+/** A successful tool result. */
 export function ok(text: string): ToolTextResult {
   return { content: [{ type: 'text', text }] };
 }
 
+/** A failed tool result: the client sees `text` as a tool error, not as a protocol error. */
 export function fail(text: string): ToolTextResult {
   return { content: [{ type: 'text', text }], isError: true };
 }

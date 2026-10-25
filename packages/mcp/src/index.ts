@@ -1,3 +1,7 @@
+/**
+ * Entry point of the MCP server: loads the configuration, starts the HTTP server and shuts it down on a signal.
+ * A configuration error or a port that cannot be bound ends the process with one log line and exit code 1.
+ */
 import * as fs from 'fs/promises';
 import { loadConfig, type Config } from './config.js';
 import { errorMessage } from './errors.js';
@@ -27,7 +31,7 @@ function start(config: Config): void {
       logger.info('HTTP server closed');
       process.exit(0);
     });
-    // Force exit if connections don't close within 10s.
+    // close() waits for every open connection, and a legacy SSE stream stays open until the client leaves.
     setTimeout(() => process.exit(1), 10_000).unref();
   }
 

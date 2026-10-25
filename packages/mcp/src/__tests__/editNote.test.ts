@@ -1,3 +1,4 @@
+// edit_note through its handler alone: replacing, inserting and deleting lines, and the calls it refuses.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
@@ -7,10 +8,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Config } from '../config.js';
 import { WriteLimiter } from '../rateLimit.js';
 
-// ---------------------------------------------------------------------------
-// Minimal stub of ToolContext / McpServer so we can call registerEditNote
-// without spinning up a real MCP server.
-// ---------------------------------------------------------------------------
+// Just enough of McpServer to capture the handler that registerEditNote registers and call it directly.
 type Handler = (
   args: Record<string, unknown>,
 ) => Promise<{ content: { type: string; text: string }[]; isError?: boolean }>;
@@ -29,9 +27,6 @@ function makeStubServer() {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Setup: create a tmp vault dir and register the tool against it.
-// ---------------------------------------------------------------------------
 let vaultDir: string;
 let server: ReturnType<typeof makeStubServer>;
 
@@ -39,7 +34,6 @@ async function setup() {
   vaultDir = await fs.mkdtemp(path.join(os.tmpdir(), 'obs-edit-test-'));
   server = makeStubServer();
 
-  // Dynamically import so the module resolves relative to dist/.
   const { registerEditNote } = await import('../tools/editNote.js');
   registerEditNote(server as unknown as McpServer, {
     config: { vaultResolved: vaultDir, trashDir: '.trash' } as unknown as Config,
@@ -61,9 +55,6 @@ async function readNote(rel: string) {
   return fs.readFile(path.join(vaultDir, rel), 'utf-8');
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 await setup();
 
 test('replaces a middle range of lines', async () => {

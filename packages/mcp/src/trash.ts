@@ -1,18 +1,20 @@
+/** The vault's trash folder: where a delete, an overwrite and an edit put the previous version of a note. */
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { resolveVaultPath } from './security.js';
 
-/** Name of a trashed copy: a timestamp, then the note's path flattened so two notes with one name cannot collide. */
+/**
+ * Name of a trashed copy: a timestamp, then the note's path flattened (`Folder/Note.md` -> `Folder__Note.md`), so
+ * two notes with one name in different folders, or two versions of one note, do not overwrite each other.
+ */
 function trashedName(notePathRelative: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  // Flatten the path for the trash directory (e.g. "Folder/Note.md" -> "Folder__Note.md")
   return `${timestamp}__${notePathRelative.replace(/[/\\]/g, '__')}`;
 }
 
 /**
- * Safely moves a file to the vault's trash directory.
- * Generates a timestamped filename to prevent collisions in the trash.
- * Returns the relative path of the trashed file (e.g., ".trash/2026-08-26...__Note.md").
+ * Moves a note into the vault's trash folder; nothing this server does ever unlinks a note.
+ * Returns the vault-relative path of the trashed file (`<trashDir>/<timestamp>__<flattened path>`).
  */
 export async function moveToTrash(vaultRoot: string, trashDir: string, notePathRelative: string): Promise<string> {
   const fullPath = resolveVaultPath(vaultRoot, notePathRelative);
@@ -27,7 +29,7 @@ export async function moveToTrash(vaultRoot: string, trashDir: string, notePathR
 
 /**
  * Keeps a copy of a note in the trash and leaves the note where it is; used before an edit changes it in place.
- * Returns the relative path of the copy.
+ * Returns the vault-relative path of the copy.
  */
 export async function copyToTrash(vaultRoot: string, trashDir: string, notePathRelative: string): Promise<string> {
   const fullPath = resolveVaultPath(vaultRoot, notePathRelative);

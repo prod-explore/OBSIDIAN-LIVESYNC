@@ -6,10 +6,9 @@ import { errorMessage } from '../errors.js';
 import { ok, fail, ToolContext } from './types.js';
 
 /**
- * Recursively walks the vault looking for .md files whose name or content
- * contains `query` (case-insensitive). This always reflects the live filesystem —
- * there is no cache here, so results can only be stale if the vault sync itself
- * (e.g. LiveSync replication from a client to this container) hasn't caught up yet.
+ * Walks the vault for .md files whose name or content contains `query` (already lower-cased), stopping at `limit`.
+ * There is no index: every search reads the files as they are on disk now, so a result is only as stale as
+ * LiveSync's replication into this vault.
  */
 async function walkAndSearch(
   dir: string,
@@ -21,7 +20,7 @@ async function walkAndSearch(
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (results.length >= limit) return;
-    if (entry.name.startsWith('.')) continue; // skip dotfiles/dirs, incl. the trash folder
+    if (entry.name.startsWith('.')) continue; // hidden files and folders, the trash included
     if (entry.isSymbolicLink()) continue; // never follow links: they may lead out of the vault
     const full = path.resolve(dir, entry.name);
     if (entry.isDirectory()) {
@@ -33,7 +32,7 @@ async function walkAndSearch(
           results.push(path.relative(vaultRoot, full));
         }
       } catch {
-        // Unreadable file (permissions, race with a concurrent delete, etc.) — skip it.
+        // Unreadable (permissions, or deleted since the folder was listed): one file does not fail the search.
       }
     }
   }
@@ -42,6 +41,7 @@ async function walkAndSearch(
 /** Most paths one search returns; a vault-wide hit list beyond this is noise for the client. */
 export const MAX_SEARCH_RESULTS = 100;
 
+/** `search_notes`: a case-insensitive substring search over note names and contents. */
 export function registerSearchNotes(server: McpServer, { config }: Pick<ToolContext, 'config'>): void {
   server.tool(
     'search_notes',

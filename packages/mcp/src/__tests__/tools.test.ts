@@ -15,8 +15,6 @@ after(() => h.cleanup());
 /** The trash holds files named `<timestamp>__<path with / as __>`. */
 const trashed = async () => (await h.files('.trash')).map((f) => f.replace(/^\.trash\/[^_]+__/, ''));
 
-// ── write_note ──────────────────────────────────────────────────────────────
-
 test('write_note creates the note, and the folders above it', async () => {
   const res = await h.call('write_note', { path: 'Projects/New/Plan.md', content: '# Plan' });
   assert.equal(res.isError, undefined);
@@ -55,8 +53,6 @@ test('write_note will not write outside the vault', async () => {
   );
 });
 
-// ── delete_note ─────────────────────────────────────────────────────────────
-
 test('delete_note moves the note to the trash instead of removing it', async () => {
   await h.write('delete/Old.md', 'keep me findable');
   const res = await h.call('delete_note', { path: 'delete/Old.md' });
@@ -79,8 +75,6 @@ test('delete_note will not touch anything outside the vault', async () => {
   assert.equal(res.isError, true);
   assert.match(text(res), /traversal/i);
 });
-
-// ── move_note ───────────────────────────────────────────────────────────────
 
 test('move_note renames the note and rewrites the links that point at it', async () => {
   await h.write('move/Old name.md', '# Old');
@@ -129,8 +123,6 @@ test('move_note will not move a note out of the vault', async () => {
   assert.equal(await h.exists('move/inside.md'), true);
 });
 
-// ── get_path ────────────────────────────────────────────────────────────────
-
 test('get_path reads a note and lists a folder, hiding dotfiles', async () => {
   await h.write('get/Note.md', 'hello');
   await h.write('get/sub/Inner.md', 'inner');
@@ -149,8 +141,6 @@ test('get_path says so for an empty folder and a missing path', async () => {
   assert.equal(missing.isError, true);
   assert.match(text(missing), /Path not found/);
 });
-
-// ── get_vault_tree ──────────────────────────────────────────────────────────
 
 test('get_vault_tree draws folders before files, hides dot folders, and stops at the depth asked for', async () => {
   await h.write('tree/B folder/deep/Leaf.md', '');
@@ -178,8 +168,6 @@ test('get_vault_tree: the vault root, a file, a missing folder', async () => {
   assert.equal(missing.isError, true);
   assert.match(text(missing), /Path not found/);
 });
-
-// ── The path guard on writes ────────────────────────────────────────────────
 
 test('no tool writes, edits, moves or deletes inside a hidden folder such as .obsidian or the trash', async () => {
   await h.write('.obsidian/community-plugins.json', '["obsidian-livesync"]');
@@ -220,8 +208,6 @@ test('write_note will not create a note through a symbolic link that leads out, 
   }
 });
 
-// ── One note at a time ──────────────────────────────────────────────────────
-
 test('delete_note, write_note and move_note refuse folders, so nothing is ever removed or moved recursively', async () => {
   await h.write('bulk/Project/a.md', 'a');
   await h.write('bulk/Project/b.md', 'b');
@@ -242,8 +228,6 @@ test('delete_note, write_note and move_note refuse folders, so nothing is ever r
   assert.ok(!(await trashed()).some((f) => f.startsWith('bulk__Project')));
 });
 
-// ── edit_note keeps the version before the edit ─────────────────────────────
-
 test('edit_note leaves the previous version of the note in the trash', async () => {
   await h.write('edit/kept.md', 'one\ntwo\nthree');
   const res = await h.call('edit_note', { path: 'edit/kept.md', start_line: 2, end_line: 2, new_content: 'TWO' });
@@ -261,8 +245,6 @@ test('a refused edit leaves nothing in the trash', async () => {
   assert.equal(res.isError, true);
   assert.ok(!(await h.files('.trash')).some((f) => f.endsWith('edit__refused.md')));
 });
-
-// ── the limit on changes ────────────────────────────────────────────────────
 
 test('writes past the limit are refused with a wait time; reads and the vault are untouched', async () => {
   const limited = await makeHarness({ writeLimit: { max: 3, windowMs: 60_000 } });

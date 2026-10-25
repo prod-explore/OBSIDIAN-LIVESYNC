@@ -7,19 +7,12 @@ import { errorMessage, isFileMissing } from '../errors.js';
 import { ok, fail, ToolContext } from './types.js';
 
 /**
- * Returns a depth-limited path snapshot rooted at the vault (or a subfolder).
- * Skips dotfiles/dotdirs (.trash, .obsidian, etc.). No content is read.
+ * `get_vault_tree`: a depth-limited listing of the vault or of one folder in it. Names only, no content; hidden
+ * entries are left out.
  *
- * depth=1 (default): top-level folders + their immediate children.
- *   Good for orientation — shows projects, areas, resource folders and their
- *   hubs/READMEs without flooding the context with leaf notes.
- * depth=-1: unlimited recursion.
- *   Use when scoped to a specific project/area subfolder.
- *
- * ── Recommended calling convention ──
- * 1. First vault contact per session: get_vault_tree() — depth=1 for orientation.
- * 2. After >5 min idle: same, to catch moves/renames that happened outside session.
- * 3. Exploring a specific area: get_vault_tree("Projects/Website", depth=-1).
+ * The default depth of 1 shows the top-level folders and what is directly inside them: enough for a client to
+ * find its way without filling its context with every note. -1 lists everything, which is meant for one folder,
+ * not the whole vault.
  */
 export function registerVaultTree(server: McpServer, { config }: Pick<ToolContext, 'config'>): void {
   server.tool(
@@ -69,12 +62,11 @@ export function registerVaultTree(server: McpServer, { config }: Pick<ToolContex
  *   ├── Project B/
  *   └── README.md
  *
- * Skips dotfiles/dotdirs and symlinks. Directories are listed before files
- * within each level for consistent visual grouping.
+ * Hidden entries and symbolic links are left out. Within each level folders come before files.
  *
- * @param maxDepth  -1 = unlimited; 0 = direct children only; N = N levels deep.
+ * @param maxDepth  -1 = unlimited; 0 = direct children only; N = N levels below them.
  * @param curDepth  current recursion depth (starts at 0).
- * @param prefix    the indentation string built up through recursion.
+ * @param prefix    the indentation built up through the recursion.
  */
 async function walk(
   dirPath: string,
@@ -85,7 +77,6 @@ async function walk(
 ): Promise<void> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
-  // Skip dotfiles/dotdirs; sort directories before files, then alphabetically.
   const visible = entries
     .filter((e) => !e.name.startsWith('.') && (e.isDirectory() || e.isFile()))
     .sort((a, b) => {

@@ -6,16 +6,12 @@ import { errorMessage, isFileMissing } from '../errors.js';
 import { ok, fail, ToolContext } from './types.js';
 
 /**
- * Unified path accessor — replaces read_note + list_folder with one tool.
+ * `get_path`: reads a note or lists a folder, whichever the path turns out to be. One tool instead of a read tool
+ * and a list tool costs less of every client's context, and a client that guesses wrong about what a path is still
+ * gets a useful answer.
  *
- * Design rationale: one tool definition is cheaper in the system-prompt token
- * budget than two.  If the AI guesses the wrong type (file vs. directory) it
- * still receives the correct content in the response — an acceptable tradeoff.
- *
- * Behaviour:
- *   - path resolves to a file   → returns file contents (utf-8)
- *   - path resolves to a folder → returns immediate children (non-recursive),
- *                                  sorted, with 📁/📄 prefix
+ *   - a file   → its contents (UTF-8)
+ *   - a folder → its immediate children, sorted, marked 📁/📄, hidden entries left out
  */
 export function registerGetPath(server: McpServer, { config }: Pick<ToolContext, 'config'>): void {
   server.tool(

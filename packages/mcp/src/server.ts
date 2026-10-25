@@ -1,3 +1,7 @@
+/**
+ * The HTTP side of the MCP server: token authentication, the two MCP transports (stateless streamable HTTP and the
+ * legacy SSE transport with its session registry), the health endpoint and the JSON answer to a bad request body.
+ */
 import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -23,8 +27,7 @@ function createMcpServer(config: Config, limiter: WriteLimiter): McpServer {
   return server;
 }
 
-// ─── Auth ───────────────────────────────────────────────────────────────────
-
+/** The token from `Authorization: Bearer …`, or from `?token=` for clients that cannot set a header. */
 function extractToken(req: express.Request): string | undefined {
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) return authHeader.split(' ')[1];
@@ -51,8 +54,6 @@ function requireAuth(config: Config, req: express.Request, res: express.Response
   return true;
 }
 
-// ─── SSE session tracking (legacy transport) ───────────────────────────────
-
 interface SseSession {
   transport: SSEServerTransport;
   server: McpServer;
@@ -62,13 +63,10 @@ interface SseSession {
 /**
  * Owns the legacy-SSE session map and sweeps it on a timer.
  *
- * Why the sweep exists: session cleanup normally happens on the response's
- * 'close' event, but that event isn't guaranteed to fire for every disconnect
- * (a phone sleeping mid-connection, a NAT/proxy dropping the socket silently,
- * etc.). Without a backstop, sessions like that live in this Map — and the
- * McpServer + transport objects they hold — forever, for the life of the
- * process. The sweep force-closes anything older than maxAgeMs so a build-up
- * of abandoned sessions can't slowly leak memory on a long-running deployment.
+ * A session is normally removed on the response's 'close' event, but that event does not fire for every
+ * disconnect (a phone that sleeps mid-connection, a NAT or proxy that drops the socket silently). Such a session,
+ * with the McpServer and transport it holds, would otherwise stay in the map for the life of the process; the
+ * sweep closes every session older than `maxAgeMs`.
  */
 class SseSessionRegistry {
   private sessions = new Map<string, SseSession>();
@@ -133,8 +131,10 @@ function handle(
   };
 }
 
-// ─── App factory ────────────────────────────────────────────────────────────
-
+/**
+ * Builds the Express app with every route. The SSE registry is returned as well so a caller that does not run the
+ * app for the life of the process (the tests) can stop its sweep timer.
+ */
 export function createApp(config: Config): { app: express.Express; sseRegistry: SseSessionRegistry } {
   const app = express();
   app.disable('x-powered-by');
@@ -145,12 +145,10 @@ export function createApp(config: Config): { app: express.Express; sseRegistry: 
   const sseRegistry = new SseSessionRegistry(config.sseSessionMaxAgeMs, config.sseSweepIntervalMs);
   sseRegistry.startSweeping();
 
-  // Prevent OAuth-aware clients from probing discovery endpoints and getting
-  // confused by a 401 where they expect a clean "not supported" 404.
+  // OAuth-aware clients probe these discovery endpoints; a plain, empty 404 tells them this server does no OAuth.
   app.get(/^\/\.well-known\/oauth-.*/, (_req, res) => res.status(404).end());
 
-  // ── Streamable HTTP transport (Antigravity, Cursor, etc.) — stateless ──
-  // Each POST spins up a fresh server+transport, handles the one request, tears down.
+  // Streamable HTTP, stateless: every POST gets its own server and transport, which are closed with the response.
   app.post(
     '/mcp/sse',
     handle('POST /mcp/sse', async (req, res) => {
@@ -174,7 +172,7 @@ export function createApp(config: Config): { app: express.Express; sseRegistry: 
     }),
   );
 
-  // ── Legacy SSE transport (Claude Desktop) ──
+  // Legacy SSE: the GET opens the stream, and the client posts its messages to /mcp/messages with the session id.
   app.get(
     '/mcp/sse',
     handle('GET /mcp/sse', async (req, res) => {
@@ -216,7 +214,6 @@ export function createApp(config: Config): { app: express.Express; sseRegistry: 
     }),
   );
 
-  // ── Health check ──
   app.get(
     '/mcp/health',
     handle('GET /mcp/health', async (req, res) => {

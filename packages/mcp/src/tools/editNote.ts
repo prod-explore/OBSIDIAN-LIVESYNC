@@ -7,15 +7,14 @@ import { errorMessage } from '../errors.js';
 import { ok, fail, tooManyWrites, ToolContext } from './types.js';
 
 /**
- * Edits a range of lines in an existing note without overwriting the whole file.
+ * `edit_note`: replaces a range of lines in an existing note, so a client can change a few lines without sending
+ * the whole note back.
  *
- * Safety choices:
- * - Path goes through resolveVaultPath() — same traversal guard as every other tool.
- * - File must already exist; this tool is not a creator (use write_note for that).
- * - Setting end_line === start_line - 1 is a pure insert: no lines are removed.
+ * - The note must exist; creating one is write_note's job.
+ * - `end_line === start_line - 1` is a pure insert: no line is removed.
  * - The version before the edit is copied to the trash first, as write_note does for an overwrite.
- * - Out-of-range indices are rejected with a descriptive error rather than silently
- *   clamped, so the agent gets clear feedback when it miscounts.
+ * - A range outside the note is refused with the line count rather than clamped, so a client that miscounted
+ *   finds out instead of editing the wrong lines.
  */
 export function registerEditNote(server: McpServer, ctx: ToolContext): void {
   const { config } = ctx;
@@ -43,7 +42,6 @@ export function registerEditNote(server: McpServer, ctx: ToolContext): void {
       try {
         const fullPath = resolveVaultPath(config.vaultResolved, notePath);
 
-        // Ensure the note exists — edit_note is not a creator.
         let original: string;
         try {
           original = await fs.readFile(fullPath, 'utf-8');
@@ -51,12 +49,9 @@ export function registerEditNote(server: McpServer, ctx: ToolContext): void {
           return fail(`Note does not exist: ${notePath}`);
         }
 
-        // Split preserving the original line structure.
         const lines = original.split('\n');
         const lineCount = lines.length;
 
-        // end_line === start_line - 1 is a valid insert (removes 0 lines).
-        // Anything below that is nonsensical.
         if (end_line < start_line - 1) {
           return fail(`end_line (${end_line}) must be >= start_line - 1 (${start_line - 1})`);
         }
@@ -76,10 +71,8 @@ export function registerEditNote(server: McpServer, ctx: ToolContext): void {
         const removedCount = end_line - start_line + 1; // 0 when inserting
         const insertLines = new_content === '' ? [] : new_content.split('\n');
 
-        // splice is 0-indexed; start_line is 1-indexed.
         lines.splice(start_line - 1, Math.max(0, removedCount), ...insertLines);
 
-        // Like an overwrite by write_note: the version before the edit stays recoverable.
         const backup = await copyToTrash(config.vaultResolved, config.trashDir, notePath);
         await fs.writeFile(fullPath, lines.join('\n'), 'utf-8');
 

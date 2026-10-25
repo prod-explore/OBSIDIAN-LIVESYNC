@@ -7,15 +7,11 @@ import { errorMessage } from '../errors.js';
 import { ok, fail, tooManyWrites, ToolContext } from './types.js';
 
 /**
- * "Deletes" a note by moving it into a vault-local trash folder — this tool
- * never calls fs.unlink. An agent (or a misfired batch operation) permanently
- * destroying notes with no recovery path is exactly the kind of risk this
- * project should not hand an AI client. Moving to `.trash/` keeps the operation
- * useful while making it reversible: worst case, you go dig the file back out.
+ * `delete_note`: moves a note into the vault's trash folder instead of unlinking it. An AI client, or a batch of
+ * calls that goes wrong, must not be able to destroy notes beyond recovery; a trashed note can be moved back.
  *
- * Collisions (deleting the same relative path twice) are handled by prefixing
- * a timestamp — the second delete does not overwrite the first one sitting in trash.
- * Folders are refused: this tool never removes more than one file.
+ * Trashed names carry a timestamp, so deleting the same path twice keeps both copies. Folders are refused: one
+ * call never removes more than one file.
  */
 export function registerDeleteNote(server: McpServer, ctx: ToolContext): void {
   const { config } = ctx;

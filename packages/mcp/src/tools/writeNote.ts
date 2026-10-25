@@ -7,6 +7,10 @@ import { moveToTrash } from '../trash.js';
 import { errorMessage } from '../errors.js';
 import { ok, fail, tooManyWrites, ToolContext } from './types.js';
 
+/**
+ * `write_note`: creates a note, and the folders above it. An existing note is replaced only with `overwrite: true`,
+ * and then the previous version goes to the trash first.
+ */
 export function registerWriteNote(server: McpServer, ctx: ToolContext): void {
   const { config } = ctx;
   server.tool(

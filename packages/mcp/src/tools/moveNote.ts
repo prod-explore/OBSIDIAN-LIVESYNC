@@ -11,18 +11,13 @@ import { ok, fail, tooManyWrites, ToolContext } from './types.js';
 import { updateBacklinks } from './refactorLinks.js';
 
 /**
- * Moves/renames a note within the vault.
+ * `move_note`: moves or renames a note and rewrites the links to it.
  *
- * Safety choices, deliberately conservative for an agent-facing tool:
- * - Both `from` and `to` go through the same path-traversal guard as every other tool.
- * - Only a note moves, never a folder, and nothing is ever moved onto a folder.
- * - Refuses to clobber an existing file at `to` unless `overwrite: true` is passed
- *   explicitly — an agent should have to state its intent to destroy something,
- *   not do it as a side effect of a typo'd destination path.
- * - If it DOES overwrite, the clobbered file is moved to `.trash/` first.
- * - Uses fs.rename (atomic on the same filesystem/volume), not copy+delete, so a
- *   crash mid-operation can't leave two copies or zero copies of the note.
- * - Updates backlinks to point to the new filename so we don't break the graph.
+ * - Only a note moves, never a folder, and nothing is moved onto a folder.
+ * - An existing note at `to` is replaced only with `overwrite: true`, so a client has to state that it means to
+ *   replace something rather than do it through a mistyped destination. The replaced note goes to the trash.
+ * - fs.rename, not copy and delete: on one file system it is atomic, so a crash cannot leave two copies or none.
+ * - Links are rewritten after the move (see updateBacklinks); if that fails, the move still stands.
  */
 export function registerMoveNote(server: McpServer, ctx: ToolContext): void {
   const { config } = ctx;
@@ -65,12 +60,11 @@ export function registerMoveNote(server: McpServer, ctx: ToolContext): void {
         await fs.mkdir(path.dirname(toPath), { recursive: true });
         await fs.rename(fromPath, toPath);
 
-        // Update backlinks across the vault
         let updatedCount = 0;
         try {
           updatedCount = await updateBacklinks(config.vaultResolved, from, to);
         } catch (err) {
-          // The move itself succeeded; say so, and say that the links are not updated.
+          // The note has already moved; a failed rewrite is logged, not turned into a failed call.
           logger.warn('Moved a note but could not update the links to it', { from, to, error: errorMessage(err) });
         }
 
