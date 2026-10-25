@@ -1,3 +1,7 @@
+/**
+ * Entry point of the sync service: one cycle at start-up, then one every POLL_INTERVAL_MINUTES, never two at once.
+ * A stop signal lets a running cycle finish before the process exits.
+ */
 import cron from 'node-cron';
 import * as path from 'path';
 import { loadConfig } from './config.js';
@@ -54,7 +58,6 @@ function bootstrap(): void {
     return currentCycle;
   };
 
-  // Run immediately on boot, then on schedule.
   void runSyncCycle().then(() => {
     if (shuttingDown) return;
     cronTask = cron.schedule(`*/${config.pollIntervalMinutes} * * * *`, () => void runSyncCycle());

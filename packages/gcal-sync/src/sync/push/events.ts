@@ -1,3 +1,4 @@
+/** Pushing event notes: {Calendar}/YYYY-MM/… to Google Calendar. */
 import type { calendar_v3 } from 'googleapis';
 import * as fs from 'fs/promises';
 import { errorMessage, isFileMissing } from '../../errors.js';
@@ -102,17 +103,12 @@ async function pushEventNote(
   note.sync_hash = computeSyncHash(note);
   await saveNote(entry.fullPath, note, entry.body);
 
-  // After writing, check if this file should live at a different (canonical) path:
-  // {Calendar}/YYYY-MM/YYYY-MM-DD-HHMM-title-shortId.md, or under 04-Archive/{Calendar}/... once its month has
-  // fully passed. This fires when the user edits the title or start time in Obsidian, or when the calendar rolls
-  // over into a new month, and the change has just been pushed to (or already matches) Google.
+  // A new title or start, or a month that has ended, gives the note another path (see eventNotePath).
   if (note.start) {
     const idealRelative = eventNotePath(note.start, summary, googleId, ctx.now());
     const currentRelative = entry.relative;
 
     if (currentRelative !== idealRelative) {
-      // Guard: ingest may already have moved this file to idealRelative in the same cycle (Google returned a
-      // reschedule that ingest processed first). If the file is gone, the move is a no-op.
       try {
         await fs.access(entry.fullPath);
         const verb =
@@ -124,13 +120,12 @@ async function pushEventNote(
         await renameAndRefactorLinks(ctx, currentRelative, idealRelative);
         ctx.log.info(`${verb} event`, { from: currentRelative, to: idealRelative });
       } catch (err) {
-        // ENOENT = ingest already moved it — nothing to do.
+        // A file that is gone is not an error; anything else is worth a line.
         if (!isFileMissing(err)) ctx.log.warn(`Could not relocate ${entry.file}`, { error: errorMessage(err) });
       }
     }
   }
 
-  // Keep the manifest in sync.
   const known = (state.knownEventIds[calendarId] ??= []);
   if (!known.includes(googleId)) known.push(googleId);
 

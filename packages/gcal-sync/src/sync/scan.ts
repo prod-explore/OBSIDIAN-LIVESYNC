@@ -47,6 +47,7 @@ export interface Scan<N extends NoteFields> {
 /** Files that live beside the notes but are not notes. */
 const isNoteFile = (name: string) => name.endsWith('.md') && !name.startsWith('README');
 
+/** Walks each root folder recursively and reads every note in it, in a fixed (sorted) order. */
 async function scanRoots<N extends NoteFields>(
   ctx: SyncContext,
   roots: string[],
@@ -60,7 +61,7 @@ async function scanRoots<N extends NoteFields>(
     try {
       dir = resolveVaultPath(ctx.config.vaultResolved, relFolder);
     } catch {
-      return; // path traversal guard
+      return; // resolveVaultPath refused it: nothing outside the vault is read
     }
 
     let entries: import('fs').Dirent[];
@@ -149,6 +150,7 @@ export async function readTaskFile(ctx: SyncContext, relative: string): Promise<
   return readOne(ctx, relative, readTaskNote);
 }
 
+/** The event counterpart of readTaskFile. */
 export async function readEventFile(ctx: SyncContext, relative: string): Promise<ScannedNote<EventNote>> {
   return readOne(ctx, relative, readEventNote);
 }

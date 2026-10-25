@@ -1,3 +1,7 @@
+/**
+ * The pull half of a cycle: Google → vault. New items become notes, changed items rewrite the synced fields of
+ * their note (never its body) and move it to where its date, title or status says it belongs.
+ */
 import type { calendar_v3, tasks_v1 } from 'googleapis';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -24,10 +28,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** google_id → vault-relative path of the note that stands for it. */
 type Index = Map<string, string>;
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
+/** Records that `id` has a note, so push can later tell when that note is deleted. */
 function addToManifest(manifest: Record<string, string[]>, key: string, id: string) {
   if (!manifest[key]) manifest[key] = [];
   if (!manifest[key].includes(id)) manifest[key].push(id);
@@ -51,10 +52,6 @@ const verbOf = (from: string, to: string) =>
       ? 'Unarchived'
       : 'Relocated';
 
-// ---------------------------------------------------------------------------
-// Main ingest function
-// ---------------------------------------------------------------------------
-
 /**
  * Pulls what changed in Google since the last cycle into the vault. Each item is applied on its own: one that
  * cannot be written is logged and skipped, and the progress marker (sync token / watermark) is only moved
@@ -64,10 +61,6 @@ export async function ingestGoogleData(ctx: SyncContext): Promise<void> {
   await ingestCalendars(ctx);
   await ingestTasks(ctx);
 }
-
-// ---------------------------------------------------------------------------
-// Calendars
-// ---------------------------------------------------------------------------
 
 async function ingestCalendars(ctx: SyncContext) {
   const { config, state, calendar } = ctx;
@@ -232,10 +225,6 @@ async function ingestEvent(ctx: SyncContext, calId: string, event: calendar_v3.S
   addToManifest(state.knownEventIds, calId, event.id);
 }
 
-// ---------------------------------------------------------------------------
-// Tasks
-// ---------------------------------------------------------------------------
-
 async function ingestTasks(ctx: SyncContext) {
   const { state, tasks } = ctx;
   const tasklists = await getTasklists(ctx);
@@ -314,7 +303,7 @@ async function ingestTask(ctx: SyncContext, list: TaskList, task: tasks_v1.Schem
     tasklist_id: list.tasklistId,
     source: 'google',
   };
-  let body = ''; // private Obsidian area
+  let body = ''; // the Markdown body belongs to Obsidian: Google data never overwrites it
 
   if (existingFile) {
     const found = await readTaskFile(ctx, existingFile);
@@ -380,8 +369,8 @@ async function ingestTask(ctx: SyncContext, list: TaskList, task: tasks_v1.Schem
     targetRelative = `${dir}/${createdPrefix}-${sanitizeTitle(task.title || 'Untitled Task')}-${task.id.substring(0, 8)}.md`;
   }
 
-  // Write the target first. If we crash before removing the old file, the next cycle finds the new one
-  // (the active folder wins in the index) and removes the stale copy then.
+  // Write the target first: a crash before the old file is removed leaves two notes with one google_id, not
+  // none, and the next cycle keeps one of them (see duplicates.ts).
   await writeNoteFile(resolveVaultPath(config.vaultResolved, targetRelative), note, body);
 
   if (existingFile && targetRelative !== existingFile) {
@@ -389,7 +378,7 @@ async function ingestTask(ctx: SyncContext, list: TaskList, task: tasks_v1.Schem
       await fs.unlink(resolveVaultPath(config.vaultResolved, existingFile));
       ctx.log.info(`${isArchived ? 'Archived' : 'Unarchived'} task`, { from: existingFile, to: targetRelative });
     } catch (err) {
-      // ENOENT: already gone (double-cycle race), the new file is correct. Anything else is worth a line.
+      // Already gone is fine: the new file is the one that counts. Anything else is worth a line.
       if (!isFileMissing(err))
         ctx.log.warn(`Could not remove the old task file ${existingFile}`, { error: errorMessage(err) });
     }

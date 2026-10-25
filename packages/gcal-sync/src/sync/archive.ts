@@ -1,27 +1,16 @@
 import { sanitizeTitle } from '../markdown/paths.js';
 
-/**
- * Folder prefix that marks a note as archived. Shared by ingest.ts and
- * push.ts so both directions agree on the same string — previously each
- * file declared its own local copy of this literal.
- */
+/** The folder that mirrors {Tasks} and {Calendar} for finished tasks and past events. */
 export const ARCHIVE_PREFIX = '04-Archive';
 
 /**
- * True once an event's month has fully passed relative to `now` — i.e. the
- * event is not in the current month or any future month.
- *
- * This is a whole-month comparison, not a day-count threshold: an event
- * dated earlier THIS month is not archived yet — it archives at the start
- * of next month, once its entire month is over. That matches the
- * {Calendar}/YYYY-MM/ folder layout: the active Calendar folder only lists
- * the current and future months, without losing anything or breaking sort order.
- *
- * Accepts either a date ("YYYY-MM-DD") or a dateTime ("YYYY-MM-DDTHH:MM...")
- * string — only the first 7 characters (YYYY-MM) are read.
+ * True once the month of `isoDateOrDateTime` is over: a whole-month comparison, not a day count. An event from
+ * earlier this month stays active until the month ends, so the active {Calendar} folder holds exactly the current
+ * and future YYYY-MM folders. Only the first seven characters (YYYY-MM) of the date or dateTime are read, and
+ * `now` is compared by its UTC month.
  */
 export function isPastMonth(isoDateOrDateTime: string, now: Date = new Date()): boolean {
-  const eventMonth = isoDateOrDateTime.slice(0, 7); // "YYYY-MM"
+  const eventMonth = isoDateOrDateTime.slice(0, 7);
   const nowMonth = now.toISOString().slice(0, 7);
   return eventMonth < nowMonth;
 }

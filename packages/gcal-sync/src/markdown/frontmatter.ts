@@ -22,10 +22,11 @@ export function parseNote(content: string): ParsedNote {
 }
 
 /**
- * Serializes frontmatter and body back into a markdown string with YAML blocks.
+ * Serializes front matter and body back into a Markdown note.
  */
 export function serializeNote(frontmatter: RawFrontmatter, body: string): string {
-  // Ensure that empty body doesn't end up lacking a newline after the frontmatter closing block
+  // A blank line between the closing `---` and the body. A body read by parseNote already starts with that
+  // newline, so a read and a write do not add another one each time.
   let normalizedBody = body;
   if (normalizedBody.length > 0 && !normalizedBody.startsWith('\n')) {
     normalizedBody = '\n' + normalizedBody;

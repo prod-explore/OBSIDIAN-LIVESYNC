@@ -9,7 +9,7 @@ export interface TasklistInfo {
 }
 
 // One lookup per Google client. A client lives for one sync cycle, so a list created or renamed in Google
-// is seen on the next cycle. (A process-wide cache only saw it after a restart.)
+// is seen on the next cycle.
 const lookups = new WeakMap<tasks_v1.Tasks, TasklistInfo>();
 // A failed lookup is remembered the same way, so one outage is one error in the log, not one per note.
 const failed = new WeakSet<tasks_v1.Tasks>();

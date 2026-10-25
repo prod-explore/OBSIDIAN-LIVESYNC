@@ -4,15 +4,8 @@ import { resolveVaultPath } from '../markdown/paths.js';
 import type { SyncContext } from './context.js';
 
 /**
- * Moves a file from oldRelativePath to newRelativePath inside the vault,
- * then — if the basename (stem) changed — scans every .md file in the vault
- * and rewrites [[OldStem]], [[OldStem|Alias]], and [[OldStem#Heading]] links
- * to use the new stem.
- *
- * Safety invariants:
- *  - Both paths go through resolveVaultPath() to prevent traversal.
- *  - If oldAbs === newAbs the function is a no-op.
- *  - Hidden directories (starting with ".") are skipped during the scan.
+ * Moves a note inside the vault and, when its file name changed, rewrites `[[OldName]]`, `[[OldName|Alias]]` and
+ * `[[OldName#Heading]]` in every note to the new name. Equal paths are a no-op; hidden folders are not scanned.
  */
 export async function renameAndRefactorLinks(
   ctx: SyncContext,
@@ -25,23 +18,20 @@ export async function renameAndRefactorLinks(
   const oldAbs = resolveVaultPath(vaultRoot, oldRelativePath);
   const newAbs = resolveVaultPath(vaultRoot, newRelativePath);
 
-  // Ensure destination directory exists before moving.
   await fs.mkdir(path.dirname(newAbs), { recursive: true });
   await fs.rename(oldAbs, newAbs);
 
   const oldStem = path.basename(oldAbs, '.md');
   const newStem = path.basename(newAbs, '.md');
 
-  // If only the folder changed but the filename is identical, Obsidian's
-  // shortest-path resolver still finds the file — no link rewrite needed.
+  // Only the folder changed: Obsidian resolves a link by name, so every link still finds the note.
   if (oldStem === newStem) return;
 
   ctx.log.info('Rewriting links', { from: oldStem, to: newStem });
 
-  // Escape for use inside a RegExp.
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  // Matches: [[OldStem]]  [[OldStem|Alias]]  [[OldStem#Heading]]
+  // [[OldStem]], [[OldStem|Alias]], [[OldStem#Heading]]; the character after the name is kept as $1.
   const regex = new RegExp(`\\[\\[${esc(oldStem)}([\\]|#])`, 'g');
 
   let updatedCount = 0;
@@ -51,11 +41,11 @@ export async function renameAndRefactorLinks(
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {
-      return; // directory disappeared mid-walk — safe to skip
+      return; // removed since its parent was listed
     }
 
     for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue; // skip .git, .obsidian, .trash …
+      if (entry.name.startsWith('.')) continue;
 
       const fullPath = path.join(dir, entry.name);
 
@@ -70,7 +60,7 @@ export async function renameAndRefactorLinks(
         }
 
         if (!regex.test(content)) continue;
-        regex.lastIndex = 0; // reset after the test() above
+        regex.lastIndex = 0; // test() on a global regex advances lastIndex
 
         const rewritten = content.replace(regex, `[[${newStem}$1`);
         await fs.writeFile(fullPath, rewritten, 'utf-8');

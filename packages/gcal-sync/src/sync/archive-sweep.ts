@@ -7,36 +7,25 @@ import { CALENDAR_FOLDER } from './folders.js';
 import { renameAndRefactorLinks } from './refactor.js';
 
 /**
- * Ingest and push only re-evaluate an event's ideal path (and therefore only
- * ever archive it) when something actually touches it — ingest relies on
- * Calendar's incremental `syncToken`, so an event nobody edits is never
- * returned by Google again on later cycles, and push skips any file that
- * isn't new and isn't locally modified. An event that just sits there,
- * untouched, would never get re-evaluated by either — which is the common
- * case, and exactly what "shorten the active Calendar folder" needs to
- * handle for events from a month that has simply ended.
+ * Moves the notes of every month that is over from {Calendar}/YYYY-MM/ to 04-Archive/{Calendar}/YYYY-MM/.
  *
- * This sweep is independent of both: it walks the active {Calendar}/YYYY-MM/
- * tree directly on disk and moves anything whose month has fully passed into
- * 04-Archive/{Calendar}/YYYY-MM/ — the same relocation mechanism
- * (renameAndRefactorLinks) ingest and push already use reactively, just
- * triggered by "time has passed" instead of "something changed." Filenames
- * are unchanged by the move (only the folder differs), so this never
- * triggers a wikilink rewrite — Obsidian resolves links by basename
- * regardless of which folder a note lives in.
+ * Ingest and push only decide where an event's note belongs when they touch the event: ingest sees an event again
+ * only when Google reports a change through the sync token, and push only handles notes that are new or edited.
+ * Most past events are touched by neither, so the archiving that time alone calls for happens here, by walking
+ * the folders on disk.
  *
- * Safe to call every sync cycle: with nothing to archive it's a handful of
- * cheap `readdir` calls, no Google API traffic.
+ * The file name does not change, only the folder, so no link has to be rewritten: Obsidian resolves a link by
+ * name wherever the note lives. With nothing to archive this is a few `readdir` calls and no Google traffic, so
+ * it runs every cycle.
  */
 export async function sweepCalendarArchive(ctx: SyncContext): Promise<void> {
   const activeRoot = CALENDAR_FOLDER;
 
-  // Scan flat YYYY-MM subdirectories directly under {Calendar}/
   const monthDirs = await listEntries(ctx, activeRoot, (e) => e.isDirectory() && /^\d{4}-\d{2}$/.test(e.name));
-  if (monthDirs === null) return; // nothing synced yet — {Calendar} doesn't exist
+  if (monthDirs === null) return; // no {Calendar} folder yet, or it could not be read (already reported)
 
   for (const yyyymm of monthDirs) {
-    if (!isPastMonth(`${yyyymm}-01`, ctx.now())) continue; // current/future month — leave alone
+    if (!isPastMonth(`${yyyymm}-01`, ctx.now())) continue;
 
     const monthRelative = `${activeRoot}/${yyyymm}`;
     const files = await listEntries(ctx, monthRelative, (e) => e.isFile() && e.name.endsWith('.md'));
@@ -49,13 +38,13 @@ export async function sweepCalendarArchive(ctx: SyncContext): Promise<void> {
         await renameAndRefactorLinks(ctx, currentRelative, targetRelative);
         ctx.log.info('Archived event', { from: currentRelative, to: targetRelative });
       } catch (err) {
-        // ENOENT = ingest/push already moved or deleted it this same cycle — nothing to do.
+        // Gone since the folder was listed: nothing left to archive.
         if (!isFileMissing(err)) ctx.fail(`Could not archive ${currentRelative}`, err);
       }
     }
 
-    // YYYY-MM folder may now be empty. Left in place deliberately —
-    // removing it is cosmetic only and risks racing a fresh ingest write.
+    // The emptied YYYY-MM folder is left in place: removing it is cosmetic, and could race an ingest that is
+    // writing a note into it.
   }
 }
 

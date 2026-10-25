@@ -13,8 +13,6 @@ import { emptyState as freshState, type SyncState } from '../sync/state.js';
 import { parseNote, serializeNote } from '../markdown/frontmatter.js';
 import type { RawFrontmatter } from '../markdown/notes.js';
 
-// ── vault ───────────────────────────────────────────────────────────────────
-
 const vaults: string[] = [];
 
 /** Register with `after(removeVaults)` in each test file. */
@@ -75,8 +73,6 @@ export async function listNotes(config: Config, rel = ''): Promise<string[]> {
   return out.sort();
 }
 
-// ── sync context ────────────────────────────────────────────────────────────
-
 /** A log line the test run captured. */
 export interface Captured {
   level: string;
@@ -124,16 +120,12 @@ export async function push(
   return ctx;
 }
 
-// ── dates ───────────────────────────────────────────────────────────────────
-
 /** A calendar date `days` from today, as YYYY-MM-DD (UTC). The sync archives by comparing with "now", so tests state dates relative to it. */
 export function dateFromNow(days: number): string {
   return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 export const today = () => dateFromNow(0);
-
-// ── Google fakes ────────────────────────────────────────────────────────────
 
 /** A request body, as loosely as the tests need to read it. */
 export type Body = Record<string, unknown>;

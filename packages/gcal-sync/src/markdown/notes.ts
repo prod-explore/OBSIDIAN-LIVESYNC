@@ -57,8 +57,6 @@ export interface Read<N> {
   problems: string[];
 }
 
-// ── value coercion ──────────────────────────────────────────────────────────
-
 function plainText(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value);
@@ -139,8 +137,7 @@ function checkedDate(note: RawFrontmatter, raw: RawFrontmatter, key: string, hin
   note[key] = text;
 }
 
-// ── readers ─────────────────────────────────────────────────────────────────
-
+/** A task note's front matter, typed and checked. */
 export function readTaskNote(raw: RawFrontmatter): Read<TaskNote> {
   const problems: string[] = [];
   const note: TaskNote = { ...raw };
@@ -151,6 +148,7 @@ export function readTaskNote(raw: RawFrontmatter): Read<TaskNote> {
   return { note, problems };
 }
 
+/** An event note's front matter, typed and checked. */
 export function readEventNote(raw: RawFrontmatter): Read<EventNote> {
   const problems: string[] = [];
   const note: EventNote = { ...raw };

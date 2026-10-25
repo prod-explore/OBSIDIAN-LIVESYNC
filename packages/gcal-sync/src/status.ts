@@ -28,6 +28,7 @@ export interface SyncStatus {
 
 export const statusFilePath = (dir: string): string => path.join(dir, 'status.json');
 
+/** The last status written; undefined when the file is missing, is not JSON, or is not a version-1 status. */
 export async function readStatus(file: string): Promise<SyncStatus | undefined> {
   try {
     const parsed = JSON.parse(await fs.readFile(file, 'utf-8')) as Partial<SyncStatus>;
@@ -57,6 +58,7 @@ const MINUTE_MS = 60_000;
 /** How old the last success may be before the sync counts as stuck: three missed polls and a margin for a long first sync. */
 export const staleAfterMinutes = (pollIntervalMinutes: number): number => pollIntervalMinutes * 3 + 5;
 
+/** The health check's verdict: healthy while the last successful cycle is recent enough. */
 export function evaluateHealth(status: SyncStatus | undefined, now: Date): Health {
   if (!status) return { healthy: false, reason: 'no sync cycle has finished yet' };
 

@@ -1,9 +1,14 @@
+/**
+ * One-off helper that prints GOOGLE_REFRESH_TOKEN: it opens Google's consent page for the Calendar and Tasks scopes,
+ * catches the redirect on localhost:3000 and exchanges the code for tokens.
+ * Run it on a machine with a browser: `npm run get-token --workspace packages/gcal-sync`.
+ */
 import { google } from 'googleapis';
 import * as http from 'http';
 import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
 
-// Load variables from .env if present
+// The repository root's .env, the same file docker compose reads.
 dotenv.config({ path: fileURLToPath(new URL('../../../.env', import.meta.url)), quiet: true });
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'MISSING_CLIENT_ID';
@@ -23,7 +28,9 @@ console.log('Generating auth URL...\n');
 const authUrl = oauth2Client.generateAuthUrl({
   access_type: 'offline',
   scope: SCOPES,
-  prompt: 'consent', // Force consent prompt to ensure refresh token is returned
+  // Google returns a refresh token only on consent: without the prompt, an account that has authorised the app
+  // before gets an access token alone.
+  prompt: 'consent',
 });
 
 console.log('====================================================');
@@ -54,7 +61,7 @@ const server = http.createServer(async (req, res) => {
 
         res.end('Authentication successful! Refresh token printed in your terminal. You can close this tab.');
 
-        // Wait a bit to ensure response is sent before killing server
+        // Give the browser a moment to receive the page before the process exits.
         setTimeout(() => {
           server.close();
           process.exit(0);

@@ -1,7 +1,10 @@
 import * as path from 'path';
 
+/** The service's settings, read once from the environment at start-up. */
 export interface Config {
+  /** VAULT_PATH as given. */
   vaultPath: string;
+  /** VAULT_PATH as an absolute path: every note path is resolved and checked against it. */
   vaultResolved: string;
   clientId: string;
   clientSecret: string;
@@ -18,6 +21,7 @@ export interface Config {
   cancelledRetentionDays: number;
 }
 
+/** Reads and checks the configuration. Throws, naming the variable, when one is missing or out of range. */
 export function loadConfig(): Config {
   const vaultPath = process.env.VAULT_PATH;
   if (!vaultPath) throw new Error('VAULT_PATH environment variable is required');

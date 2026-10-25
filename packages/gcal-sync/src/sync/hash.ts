@@ -17,9 +17,9 @@ export interface HashState extends Hashable {
 }
 
 /**
- * Computes a deterministic MD5 hash of the syncable frontmatter fields.
- * This completely isolates us from filesystem `mtime` changes (e.g. from LiveSync),
- * ensuring we only trigger syncs when actual logical data has changed.
+ * A hash of the synced fields, stored in the note as `sync_hash` when the sync writes it. A change of content is
+ * then detected from the content itself, not from the file time, which LiveSync changes without an edit.
+ * MD5 is enough: the hash detects edits, it does not defend against anyone.
  */
 export function computeSyncHash(note: Hashable): string {
   const payload = {
@@ -37,9 +37,9 @@ export function computeSyncHash(note: Hashable): string {
 /**
  * Has the note's own content been changed since the sync last wrote it?
  *
- * The hash of the syncable fields decides, because file times are unreliable (LiveSync touches files it
- * only re-downloaded). Notes written before hashes existed fall back to comparing the file time with
- * `synced_at`, with a little slack for the write itself.
+ * The hash of the synced fields decides, because file times are unreliable (LiveSync touches files it only
+ * re-downloaded). A note without `sync_hash` falls back to comparing the file time with `synced_at`, with two
+ * seconds of slack for the write itself.
  */
 export function isLocallyModified(note: HashState, mtimeMs: number): boolean {
   if (note.sync_hash) return note.sync_hash !== computeSyncHash(note);

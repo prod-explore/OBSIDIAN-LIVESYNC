@@ -9,6 +9,7 @@ export interface PushOutcome {
   containerId: string;
 }
 
+/** Writes a note back in place: its front matter from `note`, its body unchanged. */
 export function saveNote(fullPath: string, note: NoteFields, body: string): Promise<void> {
   return fs.writeFile(fullPath, serializeNote(note, body), 'utf-8');
 }

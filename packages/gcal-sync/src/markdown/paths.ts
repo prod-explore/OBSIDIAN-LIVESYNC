@@ -30,15 +30,15 @@ export function sanitizeTitle(title: string): string {
 }
 
 /**
- * Secures a relative path within the vault root.
- * Throws an error if the path attempts to traverse outside the vault.
+ * Resolves a vault-relative path and throws when the result lies outside the vault. The check is lexical: unlike
+ * the MCP server's guard, it does not look at symbolic links.
  */
 export function resolveVaultPath(vaultRoot: string, notePathRelative: string): string {
   const root = path.normalize(path.resolve(vaultRoot));
   const target = path.normalize(path.resolve(root, notePathRelative));
 
-  // The empty string gives the root directory itself, which ends with a trailing separator.
-  // Standardizing ensures we don't accidentally match prefix substrings like '/vault-mcp-evil'
+  // Compared with a trailing separator on both sides: the root itself passes, a sibling such as
+  // '/vault-mcp-evil' that merely starts with the root's name does not.
   const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
   const targetWithSep = target.endsWith(path.sep) ? target : target + path.sep;
 

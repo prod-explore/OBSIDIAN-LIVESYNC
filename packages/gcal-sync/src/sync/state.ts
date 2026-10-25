@@ -3,13 +3,19 @@ import * as path from 'path';
 import { isFileMissing } from '../errors.js';
 import { logger as defaultLogger, type Logger } from '../logger.js';
 
+/** What the sync remembers between cycles, stored as sync-state.json in the data directory. */
 export interface SyncState {
+  /** Calendar id → the sync token Google returned at the end of the last clean pull. */
   calendarTokens: Record<string, string>;
+  /** Task list id → the `updatedMin` for the next pull (the Tasks API has no sync token). */
   tasksTokens: Record<string, string>;
-  // Manifest of google_ids known to exist per tasklist/calendar.
-  // Used by push to detect file deletions (ids that vanished from the vault).
-  knownTaskIds: Record<string, string[]>; // tasklistId → [googleId, ...]
-  knownEventIds: Record<string, string[]>; // calendarId → [googleId, ...]
+  /**
+   * Task list id → the google_ids that have a note. Push compares it with the vault: an id with no note any more
+   * was deleted there, and is deleted on Google too.
+   */
+  knownTaskIds: Record<string, string[]>;
+  /** Calendar id → the google_ids that have a note; the same for events. */
+  knownEventIds: Record<string, string[]>;
 }
 
 export function emptyState(): SyncState {
@@ -21,6 +27,7 @@ export function dataDir(env: NodeJS.ProcessEnv = process.env): string {
   return env.DATA_PATH || path.resolve(process.cwd(), 'gcal-sync-state');
 }
 
+/** Loads and saves the sync state file. */
 export class StateManager {
   private stateFile: string;
 
@@ -58,7 +65,7 @@ export class StateManager {
       return emptyState();
     }
 
-    // Zero-fill new fields — existing sync-state.json files won't break.
+    // A field the file lacks starts empty, so a state file written without it still loads.
     return {
       calendarTokens: raw.calendarTokens ?? {},
       tasksTokens: raw.tasksTokens ?? {},

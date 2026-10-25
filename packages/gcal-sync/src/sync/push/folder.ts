@@ -87,6 +87,7 @@ export async function pushKind<N extends NoteFields>(ctx: SyncContext, kind: Not
   await deleteVanished(ctx, kind, present);
 }
 
+/** One push; a failure is counted and logged, and the walk goes on with the next note. */
 async function attempt<N extends NoteFields>(
   ctx: SyncContext,
   kind: NoteKind<N>,
@@ -137,8 +138,6 @@ async function deleteVanished<N extends NoteFields>(
       forgotten.add(id);
     }
 
-    // Drop every id that is gone from Google from the manifest in one go. (Filtering the original
-    // list once per id would resurrect all but the last one.)
     if (forgotten.size > 0) manifest[containerId] = knownIds.filter((id) => !forgotten.has(id));
   }
 }

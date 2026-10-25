@@ -38,6 +38,7 @@ export interface ContextParts {
   now?: () => Date;
 }
 
+/** A fresh context for one cycle, with an empty report. */
 export function createContext(parts: ContextParts): SyncContext {
   const log = parts.log ?? logger;
   const report: CycleReport = { errors: 0, problems: new Map() };

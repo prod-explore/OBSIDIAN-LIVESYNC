@@ -31,8 +31,6 @@ const synced = (fm: RawFrontmatter): RawFrontmatter => ({
   synced_at: new Date().toISOString(),
 });
 
-// ── tasks ───────────────────────────────────────────────────────────────────
-
 test('a new task note is created in Google, and the note learns its id', async () => {
   const config = await makeVault();
   const state = emptyState();
@@ -231,8 +229,6 @@ test('deleting a note deletes the Google record, and a record already gone is no
   assert.deepEqual(state.knownTaskIds.L1, []);
   assert.deepEqual(state.knownEventIds.primary, []);
 });
-
-// ── calendar ────────────────────────────────────────────────────────────────
 
 test('a new event note is created in Google and moved to its dated path', async () => {
   const config = await makeVault();

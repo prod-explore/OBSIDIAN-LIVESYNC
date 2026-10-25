@@ -1,3 +1,4 @@
+/** Pushing task notes: {Tasks}/… to Google Tasks, one subfolder per list other than the default one. */
 import type { tasks_v1 } from 'googleapis';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -93,11 +94,8 @@ async function pushTaskNote(ctx: SyncContext, entry: ScannedNote<TaskNote>, isNe
   note.synced_at = ctx.now().toISOString();
   note.sync_hash = computeSyncHash(note);
 
-  // ---- Bidirectional archive management ----
-  //
-  // After syncing to Google, move the file if its location no longer matches its status. Both directions are
-  // supported (active→archive, archive→active). The updated content is written in place first (crash-safe), then
-  // the file is renamed. If we crash in between, the file has the right content and is moved on the next cycle.
+  // A finished task goes into the archive and a re-opened one comes back out. The note is written in place first
+  // and renamed after: a crash in between leaves the right content in the old place, and the next ingest moves it.
   const fromArchive = isArchivedPath(entry.relFolder);
   const isFinished = note.status === 'completed' || note.status === 'cancelled';
   const shouldArchive = isFinished && !fromArchive;
@@ -119,7 +117,6 @@ async function pushTaskNote(ctx: SyncContext, entry: ScannedNote<TaskNote>, isNe
     }
   }
 
-  // Keep the manifest in sync.
   const known = (state.knownTaskIds[tasklistId] ??= []);
   if (!known.includes(googleId)) known.push(googleId);
 

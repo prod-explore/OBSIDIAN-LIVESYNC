@@ -14,6 +14,7 @@ export const MASS_DELETE_MIN = 5;
 /** Above the minimum, more than this share of a list vanishing at once is refused. */
 export const MASS_DELETE_SHARE = 0.5;
 
+/** Would deleting `missing` of the `known` records of one list or calendar be a mass deletion? */
 export function isMassDeletion(missing: number, known: number): boolean {
   if (missing <= MASS_DELETE_MIN || known === 0) return false;
   return missing / known > MASS_DELETE_SHARE;

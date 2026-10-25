@@ -42,8 +42,6 @@ const eventsPage =
   (items: calendar_v3.Schema$Event[], nextSyncToken = 'tok-next') =>
   () => ({ data: { items, nextSyncToken } });
 
-// ── calendar ────────────────────────────────────────────────────────────────
-
 test('a new Google event becomes a note at its dated path, with Google data in the frontmatter', async () => {
   const config = await makeVault();
   const state = emptyState();
@@ -276,8 +274,6 @@ test('any other error leaves the sync token alone and does not throw', async () 
 
   assert.equal(state.calendarTokens.primary, 'keep-me');
 });
-
-// ── tasks ───────────────────────────────────────────────────────────────────
 
 const task = (over: tasks_v1.Schema$Task = {}): tasks_v1.Schema$Task => ({
   id: 'tasknumber1',
