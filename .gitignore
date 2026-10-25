@@ -28,3 +28,4 @@ demo-vault/
 
 # Test coverage reports
 coverage/
+gcal-sync-state/
