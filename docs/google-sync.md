@@ -30,12 +30,14 @@ first level). At the start of each cycle, before any task is pulled:
 - Two lists whose names make the same folder name (after cleaning, see File names) get one folder each: the one the sync
   recorded first keeps the name, the next gets `<name> (2)`, then `(3)`, and each keeps its folder from then on.
 - A list renamed in Google has its folder and its `04-Archive/{Tasks}/` mirror renamed. If a folder with the new name is
-  already there, nothing is merged: the old folder keeps standing for the list and the clash is listed under `problems`.
+  already there, nothing is merged: the list's folder gets the next free number, `<new name> (2)`.
 - A folder renamed in the vault renames its list in Google, when the folder of a list is gone and that list's notes
   (by `tasklist_id`) are all in one new folder. The tasks keep their ids, and the archive mirror is renamed too.
-- When a list is renamed on both sides in one cycle, Google wins: the list keeps Google's name and its folder is made
-  under it. The folder renamed in the vault then stands for no list, so it gets a new list of its own, and the tasks in it
-  move there (with new ids, as any move between lists).
+- When a list is renamed on both sides in one cycle, Google's name wins, and only the name: the list stays the same list
+  and its tasks keep their ids. The folder renamed in the vault (the one that now holds the list's notes) is moved, with
+  everything in it, to Google's name, numbered as above if that name is taken, and so is the archive mirror. Nothing is
+  created in Google. If no folder holds the list's notes and the vault was not fully readable, the list waits: its tasks
+  are not pulled that cycle.
 - A folder under `04-Archive/{Tasks}/` never creates a list: archived means archived. A note in it is pushed to the list
   its folder name stands for; when there is none, the note stays as it is and is listed under `problems`.
 - Nothing deletes a list or a folder. A folder removed in the vault is created again, empty, while its list exists; a list

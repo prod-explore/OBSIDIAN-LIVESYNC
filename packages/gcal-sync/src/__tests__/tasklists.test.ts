@@ -169,7 +169,7 @@ test('nothing is created or renamed from the vault while part of it cannot be re
   assert.equal(tasks.calls.lists.insert.length, 0);
 });
 
-test('a rename in Google onto a name that already has a folder is reported, not merged', async () => {
+test('a rename in Google onto a name that already has a folder gets a numbered folder, nothing is merged', async () => {
   const config = await makeVault();
   const state = emptyState();
   const lists = [
@@ -177,16 +177,76 @@ test('a rename in Google onto a name that already has a folder is reported, not 
     { id: 'L2', title: 'Shopping' },
   ];
   await cycle(config, state, lists);
+  await writeNote(config, '{Tasks}/Shopping/Milk.md', taskNote('Milk', 'g1', 'L2'));
   await mkdir(config, '{Tasks}/Groceries');
   await writeNote(config, '{Tasks}/Groceries/Own.md', { title: 'Own', status: 'needsAction' });
 
   lists[1].title = 'Groceries';
   const tasks = google(lists);
-  const ctx = await ingest(config, state, fakeCalendar().client, tasks.client);
-  assert.match(ctx.report.problems.get('{Tasks}/Groceries') ?? '', /already has a folder/);
-  assert.equal(await exists(config, '{Tasks}/Shopping'), true);
+  await ingest(config, state, fakeCalendar().client, tasks.client);
+  assert.equal(state.tasklistFolders.L2, 'Groceries (2)');
+  assert.equal(await exists(config, '{Tasks}/Groceries (2)/Milk.md'), true);
   assert.equal(await exists(config, '{Tasks}/Groceries/Own.md'), true);
-  assert.equal(state.tasklistFolders.L2, 'Shopping');
+  assert.equal(await exists(config, '{Tasks}/Shopping'), false);
+  assert.equal(tasks.calls.lists.insert.length, 0);
+});
+
+test('a list renamed on both sides in one cycle stays one list, under the name from Google, with the same tasks', async () => {
+  const config = await makeVault();
+  const state = emptyState();
+  const lists = [
+    { id: 'L1', title: 'My Tasks' },
+    { id: 'L2', title: 'Shopping' },
+    { id: 'L3', title: 'Errands' },
+  ];
+  await cycle(config, state, lists);
+  await writeNote(config, '{Tasks}/Shopping/Milk.md', taskNote('Milk', 'g1', 'L2'));
+  await writeNote(config, '04-Archive/{Tasks}/Shopping/Bread.md', {
+    ...taskNote('Bread', 'g2', 'L2'),
+    status: 'completed',
+  });
+  state.knownTaskIds.L2 = ['g1', 'g2'];
+
+  // The vault renames the folder to "Food"; Google renames the list to "Errands", a name another list's folder has.
+  await fs.rename(path.join(config.vaultResolved, '{Tasks}/Shopping'), path.join(config.vaultResolved, '{Tasks}/Food'));
+  lists[1].title = 'Errands';
+  const tasks = await cycle(config, state, lists);
+
+  assert.equal(tasks.calls.lists.insert.length, 0, 'no second list');
+  assert.equal(tasks.calls.lists.patch.length, 0, "Google's name is kept");
+  assert.equal(tasks.calls.tasks.insert.length + tasks.calls.tasks.delete.length, 0, 'the tasks keep their ids');
+  assert.equal(state.tasklistFolders.L2, 'Errands (2)');
+  assert.equal(await exists(config, '{Tasks}/Errands (2)/Milk.md'), true);
+  assert.equal(await exists(config, '04-Archive/{Tasks}/Errands (2)/Bread.md'), true);
+  assert.equal(await exists(config, '{Tasks}/Food'), false);
+  assert.equal(await exists(config, '{Tasks}/Shopping'), false);
+  assert.deepEqual(state.knownTaskIds.L2, ['g1', 'g2']);
+
+  const next = await cycle(config, state, lists);
+  assert.equal(next.calls.lists.insert.length + next.calls.lists.patch.length, 0, 'and it stays settled');
+});
+
+test('a list renamed on both sides while the vault is not fully readable is moved when its folder is found, else waits', async () => {
+  const config = await makeVault();
+  const state = emptyState();
+  const lists = [
+    { id: 'L1', title: 'My Tasks' },
+    { id: 'L2', title: 'Shopping' },
+  ];
+  await cycle(config, state, lists);
+  await fs.rename(path.join(config.vaultResolved, '{Tasks}/Shopping'), path.join(config.vaultResolved, '{Tasks}/Food'));
+  await fs.writeFile(path.join(config.vaultResolved, '{Tasks}/Broken.md'), '---\ntitle: [unclosed\n---\n');
+  lists[1].title = 'Groceries';
+
+  const tasks = google(lists);
+  await ingest(config, state, fakeCalendar().client, tasks.client);
+  assert.equal(state.tasklistFolders.L2, 'Shopping', 'no folder holds its notes and the view is partial: not settled');
+  assert.equal(await exists(config, '{Tasks}/Groceries'), false);
+  assert.ok(
+    !tasks.calls.tasks.list.some((c) => c.tasklist === 'L2'),
+    'its tasks are not pulled, so none can bring the old folder back',
+  );
+  assert.equal(tasks.calls.lists.insert.length, 0);
 });
 
 test('a note with a google_id but no tasklist_id counts for the list of its folder, so its task is not deleted', async () => {

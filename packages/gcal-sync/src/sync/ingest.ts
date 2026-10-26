@@ -229,13 +229,14 @@ async function ingestTasks(ctx: SyncContext) {
   const { state, tasks } = ctx;
   const tasklists = await getTasklists(ctx);
   if (!tasklists) return; // Google could not be asked for the lists; the next cycle retries
-  await syncTasklistFolders(ctx);
+  // A list whose folder is not settled yet is pulled next cycle, so a new task cannot recreate a renamed folder.
+  const unsettled = await syncTasklistFolders(ctx);
 
   const getIndex: () => Promise<Index> = lazy(async () => indexWinners('task', (await scanTasks(ctx)).notes));
 
   for (const listObj of tasklists.lists) {
     const tasklistId = listObj.id;
-    if (!tasklistId) continue;
+    if (!tasklistId || unsettled.has(tasklistId)) continue;
     const isDefault = tasklistId === tasklists.defaultId;
     const listName = folderOfList(ctx, listObj);
     const lastSync = state.tasksTokens[tasklistId];
