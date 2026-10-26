@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { resolveTrashDir } from 'obsidian-livesync-shared';
 
 /** The server's settings, read once from the environment at start-up. */
 export interface Config {
@@ -8,7 +9,7 @@ export interface Config {
   /** VAULT_PATH as an absolute path: the root every client path is resolved and checked against. */
   vaultResolved: string;
   apiKey: string;
-  /** Folder (relative to vault root) that soft-deleted notes are moved into instead of being unlinked. */
+  /** TRASH_DIR: the folder (relative to the vault root) deleted and replaced notes go to; shared with the sync. */
   trashDir: string;
   /** SSE sessions older than this (ms) get force-closed by the sweep, in case the client never fired 'close'. */
   sseSessionMaxAgeMs: number;
@@ -48,8 +49,8 @@ function nonNegative(value: string | undefined, fallback: number): number {
 }
 
 /**
- * Reads the configuration from the environment. Throws when MCP_API_KEY is missing: the server never runs without
- * authentication. Every other setting has a default.
+ * Reads the configuration from the environment. Throws when MCP_API_KEY is missing (the server never runs without
+ * authentication) or TRASH_DIR is not a folder inside the vault. Every other setting has a default.
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const apiKey = env.MCP_API_KEY;
@@ -64,7 +65,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     vaultPath,
     vaultResolved: path.resolve(vaultPath),
     apiKey,
-    trashDir: env.TRASH_DIR || '.trash',
+    trashDir: resolveTrashDir(env.TRASH_DIR),
     sseSessionMaxAgeMs: Number(env.SSE_SESSION_MAX_AGE_MS) || 60 * 60 * 1000,
     sseSweepIntervalMs: Number(env.SSE_SWEEP_INTERVAL_MS) || 5 * 60 * 1000,
     bodyLimit: env.MCP_BODY_LIMIT?.trim() || '5mb',

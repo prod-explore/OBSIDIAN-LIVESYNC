@@ -7,9 +7,13 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/gcal-sync/package.json packages/gcal-sync/
 COPY packages/mcp/package.json packages/mcp/
-RUN npm ci --workspace packages/gcal-sync
+COPY packages/shared/package.json packages/shared/
+RUN npm ci --workspace packages/gcal-sync --workspace packages/shared
 
 COPY tsconfig.base.json ./
+# The settings both services share (obsidian-livesync-shared) are built first, by the package's build script.
+COPY packages/shared/tsconfig.json packages/shared/
+COPY packages/shared/src packages/shared/src
 COPY packages/gcal-sync/tsconfig.json packages/gcal-sync/
 COPY packages/gcal-sync/src packages/gcal-sync/src
 RUN npm run build --workspace packages/gcal-sync
@@ -23,11 +27,13 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY packages/gcal-sync/package.json packages/gcal-sync/
 COPY packages/mcp/package.json packages/mcp/
+COPY packages/shared/package.json packages/shared/
 RUN npm ci --workspace packages/gcal-sync --omit=dev && npm cache clean --force
 
 # The compiled tests are not part of the image.
 COPY --from=builder /app/packages/gcal-sync/dist packages/gcal-sync/dist
-RUN rm -rf packages/gcal-sync/dist/__tests__
+COPY --from=builder /app/packages/shared/dist packages/shared/dist
+RUN rm -rf packages/gcal-sync/dist/__tests__ packages/shared/dist/__tests__
 
 # Runs as the unprivileged "node" user; compose pins 1000:1000 to match headless Obsidian.
 USER node

@@ -32,3 +32,15 @@ test('writes are limited to 120 a minute unless the environment says otherwise; 
   assert.equal(loadConfig({ MCP_API_KEY: 'k', MCP_WRITE_LIMIT_PER_MINUTE: 'lots' }).writeLimit.max, 120);
   assert.equal(loadConfig({ MCP_API_KEY: 'k', MCP_WRITE_LIMIT_PER_MINUTE: '-5' }).writeLimit.max, 120);
 });
+
+test('TRASH_DIR is normalised, and one that is not a folder inside the vault stops the start', () => {
+  assert.equal(loadConfig({ MCP_API_KEY: 'k', TRASH_DIR: '  ' }).trashDir, '.trash');
+  assert.equal(loadConfig({ MCP_API_KEY: 'k', TRASH_DIR: '_System\\deleted/' }).trashDir, '_System/deleted');
+  for (const bad of ['/tmp/trash', '../outside', '.']) {
+    assert.throws(
+      () => loadConfig({ MCP_API_KEY: 'k', TRASH_DIR: bad }),
+      /TRASH_DIR must be a folder inside the vault/,
+      bad,
+    );
+  }
+});

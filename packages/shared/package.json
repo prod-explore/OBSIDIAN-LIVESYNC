@@ -1,0 +1,28 @@
+{
+  "name": "obsidian-livesync-shared",
+  "version": "1.0.0",
+  "description": "Settings both services read the same way (the vault's trash folder)",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test dist/__tests__/*.test.js",
+    "typecheck": "tsc --noEmit",
+    "test:coverage": "npm run build && c8 node --test dist/__tests__/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "private": true
+}

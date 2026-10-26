@@ -65,6 +65,7 @@ services:
       - MCP_API_KEY=${MCP_API_KEY:?set MCP_API_KEY in .env}
       - MCP_INSTRUCTIONS=${MCP_INSTRUCTIONS:-}
       - VAULT_PATH=/vault/vault-mcp
+      - TRASH_DIR=${TRASH_DIR:-}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     # Same uid as headless Obsidian, or it cannot write into folders this server creates.
     user: '1000:1000'
@@ -100,6 +101,7 @@ services:
       - POLL_INTERVAL_MINUTES=${POLL_INTERVAL_MINUTES:-5}
       - ALLOW_MASS_DELETE=${ALLOW_MASS_DELETE:-false}
       - CANCELLED_RETENTION_DAYS=${CANCELLED_RETENTION_DAYS:-30}
+      - TRASH_DIR=${TRASH_DIR:-}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DATA_PATH=/data
       - TZ=Europe/Warsaw

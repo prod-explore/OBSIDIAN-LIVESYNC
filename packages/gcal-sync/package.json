@@ -5,12 +5,12 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -b ../shared && tsc",
     "start": "node dist/index.js",
     "dev": "tsc --watch & node --watch dist/index.js",
     "test": "npm run build && node --test dist/__tests__/*.test.js",
     "get-token": "tsx scripts/get-refresh-token.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b ../shared && tsc --noEmit",
     "test:coverage": "npm run build && c8 node --test dist/__tests__/*.test.js"
   },
   "dependencies": {
@@ -18,7 +18,8 @@
     "googleapis": "^186.0.0",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.0",
-    "node-cron": "^4.6.0"
+    "node-cron": "^4.6.0",
+    "obsidian-livesync-shared": "1.0.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

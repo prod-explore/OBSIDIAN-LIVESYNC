@@ -18,6 +18,7 @@ const KEYS = [
   'POLL_INTERVAL_MINUTES',
   'ALLOW_MASS_DELETE',
   'CANCELLED_RETENTION_DAYS',
+  'TRASH_DIR',
 ];
 
 /** Runs fn with exactly BASE + env set (everything else this config reads is unset), then restores the real environment. */
@@ -42,6 +43,7 @@ test('defaults: primary calendar, every 5 minutes, mass deletion off', () => {
   assert.equal(c.pollIntervalMinutes, 5);
   assert.equal(c.allowMassDelete, false);
   assert.equal(c.cancelledRetentionDays, 30);
+  assert.equal(c.trashDir, '.trash');
 });
 
 test('calendar ids are split on commas and trimmed', () => {
@@ -79,5 +81,17 @@ test('cancelled notes are kept 30 days by default; 0 keeps them for ever; anythi
   );
   for (const bad of ['-1', '1.5', 'week', '99999']) {
     assert.throws(() => withEnv({ CANCELLED_RETENTION_DAYS: bad }, loadConfig), /CANCELLED_RETENTION_DAYS/, bad);
+  }
+});
+
+test('TRASH_DIR is read as the MCP server reads it, and may not sit inside a folder the sync reads', () => {
+  assert.equal(withEnv({ TRASH_DIR: ' _System/deleted/ ' }, loadConfig).trashDir, '_System/deleted');
+  assert.throws(() => withEnv({ TRASH_DIR: '../outside' }, loadConfig), /TRASH_DIR must be a folder inside the vault/);
+  for (const inside of ['{Tasks}/old', '{Calendar}', '04-Archive/trash']) {
+    assert.throws(
+      () => withEnv({ TRASH_DIR: inside }, loadConfig),
+      /TRASH_DIR must not be inside a folder the sync reads/,
+      inside,
+    );
   }
 });

@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [mcp, gcal-sync]
+        package: [shared, mcp, gcal-sync]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

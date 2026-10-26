@@ -46,7 +46,8 @@ make those settings identical on every device and on the headless instance.
 - `edit_note` copies the note into `.trash/` before it changes it, and `move_note` copies every note whose links it
   rewrites, under the same naming. LiveSync's own history, or the backup, is the way back for anything older.
 - The Google sync moves the folder of a task list deleted in Google (and the archive mirror of a folder deleted in the
-  vault) into `.trash/` under the same naming.
+  vault) into the same trash under the same naming. `TRASH_DIR` sets the trash folder for both services (default
+  `.trash`).
 - The `.trash/` folder is never emptied by this project.
 
 ## Calendar & Tasks sync
@@ -98,6 +99,7 @@ How notes map to events and tasks, and the sync's rules: [google-sync.md](google
 - **Logs.** `docker logs obsidian-mcp`: JSON lines like the sync's. A request with a missing or wrong token is logged as a warning with
   its method, status and path (`LOG_LEVEL=error` silences it); so is a body that is not valid JSON or is larger than
   `MCP_BODY_LIMIT` (5 MB by default; a bigger one is answered with 413). Both are logged as `Rejected a request body`, with `type` saying which.
-- **Settings.** `MCP_API_KEY` (required), `VAULT_PATH`, `PORT` (3000), `TRASH_DIR` (`.trash`), `SSE_SESSION_MAX_AGE_MS` (1 h),
+- **Settings.** `MCP_API_KEY` (required), `VAULT_PATH`, `PORT` (3000), `TRASH_DIR` (`.trash`; shared with the sync and read
+  by the same code: a folder inside the vault, or the server does not start), `SSE_SESSION_MAX_AGE_MS` (1 h),
   `SSE_SWEEP_INTERVAL_MS` (5 min), `MCP_BODY_LIMIT` (`5mb`), `MCP_WRITE_LIMIT_PER_MINUTE` (120 changes a minute for the whole server, `0` = no limit; a client over it gets an error that says how long to wait), `LOG_LEVEL`, `MCP_INSTRUCTIONS` (the line sent to clients on connect; unset = a pointer to `_Systems/AGENTS.md`, `none` = nothing).
 - **Rebuild after an update.** `docker compose up -d --build obsidian-mcp obsidian-gcal-sync`.

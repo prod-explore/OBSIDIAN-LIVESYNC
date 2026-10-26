@@ -184,9 +184,10 @@ plugin picks up those files and replicates them to CouchDB and from there to eve
 temporary folder, and never depend on LiveSync's database format. The cost is a full Electron app on the server: it is
 the heaviest container, runs without the default seccomp profile, and needs a one-time manual setup through its GUI.
 
-**Two TypeScript packages, one lockfile.** `packages/mcp` (Express and the MCP SDK) and `packages/gcal-sync`
-(googleapis, node-cron) are npm workspaces. Each has its own image, built from the repository root. They share a
-structured logger, kept as two identical files so each image stays self-contained; CI fails if they differ.
+**Two services, one lockfile.** `packages/mcp` (Express and the MCP SDK) and `packages/gcal-sync` (googleapis,
+node-cron) are npm workspaces. Each has its own image, built from the repository root. Settings both must read the same
+way (the trash folder, `TRASH_DIR`) live in a third workspace, `packages/shared`, built into both images. They also share
+a structured logger, kept as two identical files; CI fails if they differ.
 
 **The sync treats the vault as user data it must not lose.** Only front matter is synced, never the note body. Edits are
 detected by a hash of the synced fields, not by file time, which LiveSync changes on its own. Conflicts are settled by

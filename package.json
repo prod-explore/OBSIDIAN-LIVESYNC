@@ -6,7 +6,9 @@
   "description": "A self-hosted Obsidian vault that syncs between devices, is readable by AI clients over MCP, and stays in step with Google Calendar and Tasks",
   "license": "MIT",
   "workspaces": [
-    "packages/*"
+    "packages/shared",
+    "packages/gcal-sync",
+    "packages/mcp"
   ],
   "engines": {
     "node": ">=22"

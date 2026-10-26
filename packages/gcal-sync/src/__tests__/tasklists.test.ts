@@ -426,3 +426,21 @@ test('a folder that exists only in the archive never creates a list', async () =
   assert.match(ctx.report.problems.get('04-Archive/{Tasks}/Old project/Done.md') ?? '', /never create one/);
   assert.equal(ctx.report.errors, 0, 'a note left alone on purpose is not a failure');
 });
+
+test('a deleted list goes to the trash folder set in TRASH_DIR', async () => {
+  const config = await makeVault({ trashDir: '_System/deleted' });
+  const state = emptyState();
+  const lists = [
+    { id: 'L1', title: 'My Tasks' },
+    { id: 'L2', title: 'Shopping' },
+  ];
+  await cycle(config, state, lists);
+  lists.splice(1, 1);
+  await cycle(config, state, lists);
+  const inTrash = await fs.readdir(path.join(config.vaultResolved, '_System/deleted'));
+  assert.deepEqual(
+    inTrash.map((f) => f.replace(/^[^_]+__/, '')),
+    ['{Tasks}__Shopping'],
+  );
+  assert.equal(await exists(config, '.trash'), false);
+});

@@ -27,6 +27,7 @@ function fakeConfig(vaultResolved: string): Config {
     pollIntervalMinutes: 15,
     allowMassDelete: false,
     cancelledRetentionDays: 30,
+    trashDir: '.trash',
   };
 }
 

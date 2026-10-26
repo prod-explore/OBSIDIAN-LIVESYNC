@@ -1,16 +1,8 @@
 /** The vault's trash folder: where a delete, an overwrite and an edit put the previous version of a note. */
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { trashedName } from 'obsidian-livesync-shared';
 import { resolveVaultPath } from './security.js';
-
-/**
- * Name of a trashed copy: a timestamp, then the note's path flattened (`Folder/Note.md` -> `Folder__Note.md`), so
- * two notes with one name in different folders, or two versions of one note, do not overwrite each other.
- */
-function trashedName(notePathRelative: string): string {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return `${timestamp}__${notePathRelative.replace(/[/\\]/g, '__')}`;
-}
 
 /**
  * Moves a note into the vault's trash folder; nothing this server does ever unlinks a note.

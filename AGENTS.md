@@ -7,7 +7,7 @@ typical side project.
 
 ## Before touching anything
 
-1. `npm test` at the repository root (or `npm test --workspace packages/mcp`, `packages/gcal-sync` for one part) —
+1. `npm test` at the repository root (or `npm test --workspace packages/mcp`, `packages/gcal-sync` or `packages/shared` for one part) —
    it type-checks, builds and runs every test, and must pass before *and*
    after your change. So must `npm run lint` and `npm run format:check`.
 2. Both packages run TypeScript in `strict` mode. Don't loosen it to make an

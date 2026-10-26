@@ -41,8 +41,9 @@ first level). At the start of each cycle, before any task is pulled:
 - A folder under `04-Archive/{Tasks}/` never creates a list: archived means archived. A note in it is pushed to the list
   its folder name stands for; when there is none, the note stays as it is and is listed under `problems`.
 - Deletions carry across both ways. A folder deleted in the vault deletes its list in Google (with its tasks), and the
-  folder's archive mirror goes to `.trash/`. A list deleted in Google moves its folder and archive mirror, notes and all,
-  to `.trash/` (named `<timestamp>__<path with / as __>`, as the MCP server's `delete_note` does); nothing in the vault is
+  folder's archive mirror goes to the trash. A list deleted in Google moves its folder and archive mirror, notes and all,
+  to the trash (`TRASH_DIR`, `.trash/` by default, the MCP server's trash; named `<timestamp>__<path with / as __>`, as
+  its `delete_note` names things); nothing in the vault is
   removed for good. Emptiness is not deletion: an empty folder or an empty list stays, empty, on both sides.
 - A deletion only carries across when the sync is sure: the list is in its recorded mapping, Google's task lists were
   listed this cycle, and every task note could be read. A folder deleted in the vault also needs `{Tasks}/` itself to

@@ -33,6 +33,7 @@ export async function makeVault(overrides: Partial<Config> = {}): Promise<Config
     pollIntervalMinutes: 5,
     allowMassDelete: false,
     cancelledRetentionDays: 30,
+    trashDir: '.trash',
     ...overrides,
   };
 }

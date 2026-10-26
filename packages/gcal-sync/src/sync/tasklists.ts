@@ -4,6 +4,7 @@
  * is made, renamed or trashed in the vault, and the other way round. An empty list or folder is still there and stays.
  */
 import { tasks_v1 } from 'googleapis';
+import { trashedName } from 'obsidian-livesync-shared';
 import * as fs from 'fs/promises';
 import { isAlreadyGone, isFileMissing } from '../errors.js';
 import { resolveVaultPath, sanitizeTitle } from '../markdown/paths.js';
@@ -124,15 +125,11 @@ async function subfolders(
   }
 }
 
-/** The trash folder of the vault; the MCP server's default TRASH_DIR, so everything removed is in one place. */
-export const TRASH_FOLDER = '.trash';
-
-/** Moves a folder into the trash as `<timestamp>__<path with / as __>`, the naming the MCP server uses. */
+/** Moves a folder into the trash (TRASH_DIR) under the name the MCP server gives what it trashes. */
 async function moveFolderToTrash(ctx: SyncContext, relFolder: string): Promise<string> {
-  const timestamp = ctx.now().toISOString().replace(/[:.]/g, '-');
-  const trashed = `${TRASH_FOLDER}/${timestamp}__${relFolder.replace(/\//g, '__')}`;
-  const vault = ctx.config.vaultResolved;
-  await fs.mkdir(resolveVaultPath(vault, TRASH_FOLDER), { recursive: true });
+  const { trashDir, vaultResolved: vault } = ctx.config;
+  const trashed = `${trashDir}/${trashedName(relFolder, ctx.now())}`;
+  await fs.mkdir(resolveVaultPath(vault, trashDir), { recursive: true });
   await fs.rename(resolveVaultPath(vault, relFolder), resolveVaultPath(vault, trashed));
   return trashed;
 }
