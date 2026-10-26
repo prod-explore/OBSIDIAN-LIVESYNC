@@ -38,7 +38,7 @@ $ mcp get_vault_tree '{}'
 └── Welcome.md
 
 $ mcp move_note '{"from":"Projects/Plan.md","to":"Projects/Roadmap.md"}'
-Moved Projects/Plan.md → Projects/Roadmap.md. Updated 1 backlink(s).
+Moved Projects/Plan.md → Projects/Roadmap.md. Updated 1 link in 1 note.
 
 $ mcp get_path '{"path":"Welcome.md"}'
 # Welcome

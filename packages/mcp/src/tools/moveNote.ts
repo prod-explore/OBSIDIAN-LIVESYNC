@@ -7,8 +7,7 @@ import { moveToTrash } from '../trash.js';
 import { errorMessage } from '../errors.js';
 import { logger } from '../logger.js';
 import { ok, fail, tooManyWrites, ToolContext } from './types.js';
-
-import { updateBacklinks } from './refactorLinks.js';
+import { updateBacklinks, type BacklinkUpdate } from './refactorLinks.js';
 
 /**
  * `move_note`: moves or renames a note and rewrites the links to it.
@@ -17,7 +16,8 @@ import { updateBacklinks } from './refactorLinks.js';
  * - An existing note at `to` is replaced only with `overwrite: true`, so a client has to state that it means to
  *   replace something rather than do it through a mistyped destination. The replaced note goes to the trash.
  * - fs.rename, not copy and delete: on one file system it is atomic, so a crash cannot leave two copies or none.
- * - Links are rewritten after the move (see updateBacklinks); if that fails, the move still stands.
+ * - Links are rewritten after the move (see updateBacklinks). The move stands whatever happens to them, and the
+ *   result names every note whose links could not be rewritten, so the client can fix those by hand.
  */
 export function registerMoveNote(server: McpServer, ctx: ToolContext): void {
   const { config } = ctx;
@@ -60,23 +60,31 @@ export function registerMoveNote(server: McpServer, ctx: ToolContext): void {
         await fs.mkdir(path.dirname(toPath), { recursive: true });
         await fs.rename(fromPath, toPath);
 
-        let updatedCount = 0;
+        let links: string;
         try {
-          updatedCount = await updateBacklinks(config.vaultResolved, from, to);
+          links = describeLinkUpdate(await updateBacklinks(config.vaultResolved, from, to), from);
         } catch (err) {
-          // The note has already moved; a failed rewrite is logged, not turned into a failed call.
+          // The note has already moved, so this is not a failed call; the client still has to hear about it.
           logger.warn('Moved a note but could not update the links to it', { from, to, error: errorMessage(err) });
+          links = `WARNING: links to ${from} were not updated: ${errorMessage(err)}`;
         }
 
-        if (trashedPath) {
-          return ok(
-            `Moved ${from} → ${to} (overwritten file backed up to ${trashedPath}). Updated ${updatedCount} backlink(s).`,
-          );
-        }
-        return ok(`Moved ${from} → ${to}. Updated ${updatedCount} backlink(s).`);
+        const backup = trashedPath ? ` (overwritten file backed up to ${trashedPath})` : '';
+        return ok(`Moved ${from} → ${to}${backup}. ${links}`);
       } catch (err) {
         return fail(`Error moving note: ${errorMessage(err)}`);
       }
     },
   );
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** The link part of move_note's answer: what was rewritten, then every note that could not be. */
+function describeLinkUpdate(update: BacklinkUpdate, from: string): string {
+  const done = `Updated ${plural(update.links, 'link')} in ${plural(update.files.length, 'note')}.`;
+  if (update.failed.length === 0) return done;
+  logger.warn('Moved a note but could not update the links in some notes', { from, failed: update.failed });
+  const list = update.failed.map((f) => `${f.file} (${f.error})`).join('; ');
+  return `${done} WARNING: could not update ${plural(update.failed.length, 'note')}, which may still link to ${from}: ${list}`;
 }

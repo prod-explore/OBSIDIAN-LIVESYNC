@@ -5,6 +5,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { makeHarness, text, type Harness } from './harness.js';
+import { withWriteFailing } from './failingWrite.js';
 
 let h: Harness;
 before(async () => {
@@ -81,9 +82,26 @@ test('move_note renames the note and rewrites the links that point at it', async
   await h.write('move/Linker.md', 'See [[Old name]] and [[Old name|the alias]].');
   const res = await h.call('move_note', { from: 'move/Old name.md', to: 'move/New name.md' });
   assert.equal(res.isError, undefined);
-  assert.match(text(res), /Updated 1 backlink/);
+  assert.match(text(res), /Updated 2 links in 1 note\./);
   assert.equal(await h.exists('move/Old name.md'), false);
   assert.equal(await h.read('move/Linker.md'), 'See [[New name]] and [[New name|the alias]].');
+});
+
+test('move_note names the notes whose links it could not rewrite', async () => {
+  await h.write('move/Target.md', '# t');
+  await h.write('move/ok.md', '[[Target]]');
+  await h.write('move/locked.md', '[[Target]]');
+  const res = await withWriteFailing(path.join(h.vault, 'move/locked.md'), () =>
+    h.call('move_note', { from: 'move/Target.md', to: 'move/Renamed.md' }),
+  );
+  assert.equal(res.isError, undefined, 'the move itself succeeded');
+  assert.match(text(res), /Updated 1 link in 1 note\./);
+  assert.match(
+    text(res),
+    /WARNING: could not update 1 note, which may still link to move\/Target\.md: move\/locked\.md \(EACCES/,
+  );
+  assert.equal(await h.read('move/ok.md'), '[[Renamed]]');
+  assert.equal(await h.read('move/locked.md'), '[[Target]]');
 });
 
 test('move_note creates the destination folder', async () => {

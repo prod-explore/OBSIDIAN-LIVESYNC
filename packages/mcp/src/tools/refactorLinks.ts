@@ -1,5 +1,16 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { errorMessage } from '../errors.js';
+
+/** What a link rewrite did; paths are vault-relative with forward slashes. */
+export interface BacklinkUpdate {
+  /** Links rewritten, over all notes. */
+  links: number;
+  /** Notes that were rewritten. */
+  files: string[];
+  /** Notes that could not be read or written; any link to the old path in them still points there. */
+  failed: { file: string; error: string }[];
+}
 
 function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -14,12 +25,18 @@ function escapeRegExp(string: string) {
  * and only links that spell out the old folder path are rewritten. Files whose content would not
  * change are not touched, so a pure folder move does not make LiveSync re-upload half the vault.
  *
+ * Each note is read and written on its own: one that cannot be rewritten is recorded in `failed` and the rest are
+ * still updated, so the caller can tell the client exactly which notes still point at the old path.
+ *
  * @param vaultRoot Absolute path to the vault root
  * @param oldRelPath Relative path to the old note (e.g. 'folder/old.md' or 'old.md')
  * @param newRelPath Relative path to the new note (e.g. 'folder/new.md' or 'new.md')
- * @returns number of files updated
  */
-export async function updateBacklinks(vaultRoot: string, oldRelPath: string, newRelPath: string): Promise<number> {
+export async function updateBacklinks(
+  vaultRoot: string,
+  oldRelPath: string,
+  newRelPath: string,
+): Promise<BacklinkUpdate> {
   const files = await getAllMdFiles(vaultRoot);
 
   const oldName = path.basename(oldRelPath, '.md');
@@ -43,7 +60,8 @@ export async function updateBacklinks(vaultRoot: string, oldRelPath: string, new
     ...new Set([oldName + '.md', oldRelPathForward, encodeURI(oldName + '.md'), encodeURI(oldRelPathForward)]),
   ].filter(usable);
 
-  if (wikiTargets.length === 0 && mdTargets.length === 0) return 0;
+  const result: BacklinkUpdate = { links: 0, files: [], failed: [] };
+  if (wikiTargets.length === 0 && mdTargets.length === 0) return result;
 
   // [[Target]], [[Target#heading]], [[Target|alias]], [[Target#heading|alias]]
   const wikilinkRegex = wikiTargets.length
@@ -54,33 +72,42 @@ export async function updateBacklinks(vaultRoot: string, oldRelPath: string, new
     ? new RegExp(`\\[([^\\]]*)\\]\\((${mdTargets.map(escapeRegExp).join('|')})\\)`, 'gi')
     : null;
 
-  let updatedCount = 0;
-
   for (const file of files) {
-    const content = await fs.readFile(file, 'utf-8');
-    let newContent = content;
+    const rel = path.relative(vaultRoot, file).split(path.sep).join('/');
+    try {
+      const content = await fs.readFile(file, 'utf-8');
+      let links = 0;
+      let newContent = content;
 
-    if (wikilinkRegex) {
-      newContent = newContent.replace(wikilinkRegex, (_match, target: string, heading?: string, alias?: string) => {
-        // A link that spelled out the folder keeps doing so; a bare name stays bare.
-        const to = target.includes('/') ? newRelPathWithoutExt : newName;
-        return `[[${to}${heading ?? ''}${alias ?? ''}]]`;
-      });
-    }
-    if (mdLinkRegex) {
-      newContent = newContent.replace(mdLinkRegex, (_match, text: string, target: string) => {
-        const to = target.includes('/') ? newRelPathForward : newName + '.md';
-        return `[${text}](${encodeURI(to)})`;
-      });
-    }
+      if (wikilinkRegex) {
+        newContent = newContent.replace(wikilinkRegex, (match, target: string, heading?: string, alias?: string) => {
+          // A link that spelled out the folder keeps doing so; a bare name stays bare.
+          const to = target.includes('/') ? newRelPathWithoutExt : newName;
+          const replaced = `[[${to}${heading ?? ''}${alias ?? ''}]]`;
+          if (replaced !== match) links++;
+          return replaced;
+        });
+      }
+      if (mdLinkRegex) {
+        newContent = newContent.replace(mdLinkRegex, (match, text: string, target: string) => {
+          const to = target.includes('/') ? newRelPathForward : newName + '.md';
+          const replaced = `[${text}](${encodeURI(to)})`;
+          if (replaced !== match) links++;
+          return replaced;
+        });
+      }
 
-    if (newContent !== content) {
-      await fs.writeFile(file, newContent, 'utf-8');
-      updatedCount++;
+      if (newContent !== content) {
+        await fs.writeFile(file, newContent, 'utf-8');
+        result.links += links;
+        result.files.push(rel);
+      }
+    } catch (err) {
+      result.failed.push({ file: rel, error: errorMessage(err) });
     }
   }
 
-  return updatedCount;
+  return result;
 }
 
 async function getAllMdFiles(dir: string, fileList: string[] = []): Promise<string[]> {

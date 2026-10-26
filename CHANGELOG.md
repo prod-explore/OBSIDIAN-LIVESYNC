@@ -15,6 +15,9 @@ All notable changes. Format after [Keep a Changelog](https://keepachangelog.com/
 - MCP: `MCP_BODY_LIMIT` (5 MB by default). The 100 kB default of Express made `write_note` fail on a larger note.
 - MCP: `edit_note` copies the note to `.trash/` before changing it.
 
+### Fixed
+- MCP: `move_note` reported "Updated N backlink(s)" counting notes, and one note that could not be rewritten stopped the rest and was only logged. It now counts links and notes, rewrites every note it can, and names each note it could not.
+
 ### Changed
 - Sync: `_Systems/sync-conflicts.md` records the whole front matter of the edit that lost, not only its title and time.
 - MCP: a malformed or oversized request body is answered with JSON and one structured log line instead of Express's stack trace.

@@ -4,6 +4,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { updateBacklinks } from '../tools/refactorLinks.js';
+import { withWriteFailing } from './failingWrite.js';
 
 async function makeVault(files: Record<string, string>): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'obs-links-'));
@@ -29,8 +30,8 @@ test('renaming a note rewrites wikilinks and keeps heading and alias', async () 
     'Inbox/draft.md': '# draft',
     'Daily.md': 'See [[draft]], [[draft#Plan]], [[draft|the draft]] and [[draft#Plan|plan]].',
   });
-  const changed = await move(dir, 'Inbox/draft.md', 'Inbox/final.md');
-  assert.equal(changed, 1);
+  const update = await move(dir, 'Inbox/draft.md', 'Inbox/final.md');
+  assert.deepEqual(update, { links: 4, files: ['Daily.md'], failed: [] });
   assert.equal(
     await read(dir, 'Daily.md'),
     'See [[final]], [[final#Plan]], [[final|the draft]] and [[final#Plan|plan]].',
@@ -61,7 +62,7 @@ test('moving a note to another folder under the same name touches nothing', asyn
   const before = (await fs.stat(path.join(dir, 'Daily.md'))).mtimeMs;
   await new Promise((r) => setTimeout(r, 20));
 
-  assert.equal(await move(dir, 'Inbox/draft.md', 'Areas/draft.md'), 0);
+  assert.deepEqual(await move(dir, 'Inbox/draft.md', 'Areas/draft.md'), { links: 0, files: [], failed: [] });
   assert.equal(await read(dir, 'Daily.md'), original);
   assert.equal(
     (await fs.stat(path.join(dir, 'Daily.md'))).mtimeMs,
@@ -85,13 +86,13 @@ test('bare-name links are left alone when another note shares the name', async (
 
 test('a root-level note whose name is shared is not rewritten at all', async () => {
   const dir = await makeVault({ 'Index.md': '# root', 'Sub/Index.md': '# sub', 'Hub.md': '[[Index]]' });
-  assert.equal(await move(dir, 'Index.md', 'Home.md'), 0);
+  assert.equal((await move(dir, 'Index.md', 'Home.md')).links, 0);
   assert.equal(await read(dir, 'Hub.md'), '[[Index]]');
 });
 
 test('link matching ignores case and escapes regex characters in names', async () => {
   const dir = await makeVault({ 'What (is) this?.md': '#', 'x.md': 'See [[what (IS) this?]].' });
-  assert.equal(await move(dir, 'What (is) this?.md', 'Renamed.md'), 1);
+  assert.equal((await move(dir, 'What (is) this?.md', 'Renamed.md')).links, 1);
   assert.equal(await read(dir, 'x.md'), 'See [[Renamed]].');
 });
 
@@ -106,4 +107,29 @@ test('dot folders (.trash, .obsidian) are never rewritten', async () => {
   assert.equal(await read(dir, '.trash/old.md'), 'Was [[n]]');
   assert.equal(await read(dir, '.obsidian/notes.md'), '[[n]]');
   assert.equal(await read(dir, 'live.md'), '[[m]]');
+});
+
+test('links are counted one by one, over several notes', async () => {
+  const dir = await makeVault({
+    'n.md': '#',
+    'a.md': '[[n]] [[n#h]] [x](n.md)',
+    'sub/b.md': '[[n|alias]]',
+    'c.md': 'no link here',
+  });
+  const update = await move(dir, 'n.md', 'm.md');
+  assert.equal(update.links, 4);
+  assert.deepEqual(update.files.sort(), ['a.md', 'sub/b.md']);
+});
+
+test('a note that cannot be written is reported, and the other notes are still rewritten', async () => {
+  const dir = await makeVault({ 'n.md': '#', 'a.md': '[[n]]', 'b.md': '[[n]]', 'c.md': '[[n]]' });
+  const blocked = path.join(dir, 'b.md');
+  const update = await withWriteFailing(blocked, () => move(dir, 'n.md', 'm.md'));
+
+  assert.deepEqual(update.failed, [{ file: 'b.md', error: 'EACCES: permission denied (simulated)' }]);
+  assert.deepEqual(update.files.sort(), ['a.md', 'c.md']);
+  assert.equal(update.links, 2);
+  assert.equal(await read(dir, 'a.md'), '[[m]]');
+  assert.equal(await read(dir, 'b.md'), '[[n]]');
+  assert.equal(await read(dir, 'c.md'), '[[m]]');
 });
