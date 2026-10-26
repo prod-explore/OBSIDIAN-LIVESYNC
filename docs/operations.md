@@ -48,6 +48,8 @@ make those settings identical on every device and on the headless instance.
 
 ## Calendar & Tasks sync
 
+How notes map to events and tasks, and the sync's rules: [google-sync.md](google-sync.md).
+
 - **Health.** The container has a health check: it is `healthy` while the last successful cycle is recent (three polls plus five
   minutes), whatever single cycles did in between.
   `docker inspect --format '{{json .State.Health}}' obsidian-gcal-sync` shows the verdict and the reason (for example
