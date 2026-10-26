@@ -88,6 +88,9 @@ Every `POLL_INTERVAL_MINUTES` (default 5), and once at start-up. Cycles never ov
 A note's own edits are detected from its content, not from the file time: the sync stores an MD5 hash of the synced fields
 (`title`, `status`, `due`, `start`, `end`, `description`) as `sync_hash`, and a note whose fields no longer match it has
 been edited. File times are unreliable here because LiveSync rewrites files it only re-downloaded.
+A note without `sync_hash` (written by hand or by another app) falls back to its file time: it counts as edited when the
+file is more than two seconds newer than its `synced_at`, and as unchanged when it has no `synced_at` either. The next
+write by the sync gives it a hash.
 
 ## Conflicts
 

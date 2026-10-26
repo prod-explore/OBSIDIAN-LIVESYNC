@@ -38,8 +38,11 @@ export function computeSyncHash(note: Hashable): string {
  * Has the note's own content been changed since the sync last wrote it?
  *
  * The hash of the synced fields decides, because file times are unreliable (LiveSync touches files it only
- * re-downloaded). A note without `sync_hash` falls back to comparing the file time with `synced_at`, with two
- * seconds of slack for the write itself.
+ * re-downloaded). Not every note has one: a note written by hand or by another app, or whose front matter was copied
+ * without it, carries `google_id` and maybe `synced_at` but no `sync_hash`. For those the file time is the only
+ * evidence left, so it is compared with `synced_at` (two seconds of slack for the sync's own write). A note with
+ * neither counts as unchanged: Google's version wins rather than an edit being invented. Once the sync writes the
+ * note, it has a hash.
  */
 export function isLocallyModified(note: HashState, mtimeMs: number): boolean {
   if (note.sync_hash) return note.sync_hash !== computeSyncHash(note);
