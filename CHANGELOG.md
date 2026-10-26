@@ -13,7 +13,7 @@ All notable changes. Format after [Keep a Changelog](https://keepachangelog.com/
 ### Added
 - MCP: writes are rate limited (`MCP_WRITE_LIMIT_PER_MINUTE`, 120 by default, `0` = off): a client in a loop can no longer rewrite or trash a vault in seconds.
 - MCP: `MCP_BODY_LIMIT` (5 MB by default). The 100 kB default of Express made `write_note` fail on a larger note.
-- MCP: `edit_note` copies the note to `.trash/` before changing it.
+- MCP: `edit_note` copies the note to `.trash/` before changing it, and `move_note` copies every note whose links it rewrites.
 
 ### Fixed
 - MCP: `move_note` reported "Updated N backlink(s)" counting notes, and one note that could not be rewritten stopped the rest and was only logged. It now counts links and notes, rewrites every note it can, and names each note it could not.

@@ -82,9 +82,23 @@ test('move_note renames the note and rewrites the links that point at it', async
   await h.write('move/Linker.md', 'See [[Old name]] and [[Old name|the alias]].');
   const res = await h.call('move_note', { from: 'move/Old name.md', to: 'move/New name.md' });
   assert.equal(res.isError, undefined);
-  assert.match(text(res), /Updated 2 links in 1 note\./);
+  assert.match(text(res), /Updated 2 links in 1 note \(previous versions copied to the trash\)\./);
   assert.equal(await h.exists('move/Old name.md'), false);
   assert.equal(await h.read('move/Linker.md'), 'See [[New name]] and [[New name|the alias]].');
+});
+
+test('move_note copies every note whose links it rewrites to the trash first', async () => {
+  await h.write('backlinks/Source.md', '# s');
+  await h.write('backlinks/Linker.md', 'before [[Source]]');
+  await h.write('backlinks/Unrelated.md', 'nothing to rewrite');
+  const res = await h.call('move_note', { from: 'backlinks/Source.md', to: 'backlinks/Dest.md' });
+  assert.equal(res.isError, undefined, text(res));
+  assert.equal(await h.read('backlinks/Linker.md'), 'before [[Dest]]');
+
+  const saved = (await h.files('.trash')).filter((f) => f.includes('backlinks__'));
+  assert.equal(saved.length, 1, `only the rewritten note is copied: ${saved.join(', ')}`);
+  assert.ok(saved[0].endsWith('backlinks__Linker.md'));
+  assert.equal(await h.read(saved[0]), 'before [[Source]]');
 });
 
 test('move_note names the notes whose links it could not rewrite', async () => {
@@ -95,7 +109,7 @@ test('move_note names the notes whose links it could not rewrite', async () => {
     h.call('move_note', { from: 'move/Target.md', to: 'move/Renamed.md' }),
   );
   assert.equal(res.isError, undefined, 'the move itself succeeded');
-  assert.match(text(res), /Updated 1 link in 1 note\./);
+  assert.match(text(res), /Updated 1 link in 1 note \(previous versions copied to the trash\)\./);
   assert.match(
     text(res),
     /WARNING: could not update 1 note, which may still link to move\/Target\.md: move\/locked\.md \(EACCES/,

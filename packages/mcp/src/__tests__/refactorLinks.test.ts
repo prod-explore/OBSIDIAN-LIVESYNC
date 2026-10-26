@@ -133,3 +133,19 @@ test('a note that cannot be written is reported, and the other notes are still r
   assert.equal(await read(dir, 'b.md'), '[[n]]');
   assert.equal(await read(dir, 'c.md'), '[[m]]');
 });
+
+test('the backup runs before each rewrite, and a note whose backup fails is left as it was', async () => {
+  const dir = await makeVault({ 'n.md': '#', 'a.md': '[[n]]', 'b.md': '[[n]]', 'c.md': 'none' });
+  await fs.rename(path.join(dir, 'n.md'), path.join(dir, 'm.md'));
+  const seen: Record<string, string> = {};
+  const update = await updateBacklinks(dir, 'n.md', 'm.md', {
+    backup: async (rel) => {
+      if (rel === 'b.md') throw new Error('trash is full');
+      seen[rel] = await read(dir, rel);
+    },
+  });
+  assert.deepEqual(seen, { 'a.md': '[[n]]' }, 'backed up with its old content, and only the notes that change');
+  assert.deepEqual(update.failed, [{ file: 'b.md', error: 'trash is full' }]);
+  assert.equal(await read(dir, 'a.md'), '[[m]]');
+  assert.equal(await read(dir, 'b.md'), '[[n]]');
+});

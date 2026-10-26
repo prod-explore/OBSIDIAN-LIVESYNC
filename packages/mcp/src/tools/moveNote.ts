@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { resolveVaultPath } from '../security.js';
-import { moveToTrash } from '../trash.js';
+import { copyToTrash, moveToTrash } from '../trash.js';
 import { errorMessage } from '../errors.js';
 import { logger } from '../logger.js';
 import { ok, fail, tooManyWrites, ToolContext } from './types.js';
@@ -16,14 +16,14 @@ import { updateBacklinks, type BacklinkUpdate } from './refactorLinks.js';
  * - An existing note at `to` is replaced only with `overwrite: true`, so a client has to state that it means to
  *   replace something rather than do it through a mistyped destination. The replaced note goes to the trash.
  * - fs.rename, not copy and delete: on one file system it is atomic, so a crash cannot leave two copies or none.
- * - Links are rewritten after the move (see updateBacklinks). The move stands whatever happens to them, and the
+ * - Links are rewritten after the move (see updateBacklinks), each changed note copied to the trash first. The move stands whatever happens to them, and the
  *   result names every note whose links could not be rewritten, so the client can fix those by hand.
  */
 export function registerMoveNote(server: McpServer, ctx: ToolContext): void {
   const { config } = ctx;
   server.tool(
     'move_note',
-    'Moves or renames a note within the vault. Fails if destination exists unless overwrite is set (clobbered file goes to trash). Automatically updates backlinks.',
+    'Moves or renames a note within the vault. Fails if destination exists unless overwrite is set (clobbered file goes to trash). Automatically updates backlinks; each note it rewrites is copied to the trash first.',
     {
       from: z.string().describe('Current path of the note, relative to the vault root'),
       to: z.string().describe('Destination path, relative to the vault root'),
@@ -62,7 +62,9 @@ export function registerMoveNote(server: McpServer, ctx: ToolContext): void {
 
         let links: string;
         try {
-          links = describeLinkUpdate(await updateBacklinks(config.vaultResolved, from, to), from);
+          // Every note whose links change is copied to the trash first, as edit_note does before it changes a note.
+          const backup = (rel: string) => copyToTrash(config.vaultResolved, config.trashDir, rel);
+          links = describeLinkUpdate(await updateBacklinks(config.vaultResolved, from, to, { backup }), from);
         } catch (err) {
           // The note has already moved, so this is not a failed call; the client still has to hear about it.
           logger.warn('Moved a note but could not update the links to it', { from, to, error: errorMessage(err) });
@@ -82,7 +84,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /** The link part of move_note's answer: what was rewritten, then every note that could not be. */
 function describeLinkUpdate(update: BacklinkUpdate, from: string): string {
-  const done = `Updated ${plural(update.links, 'link')} in ${plural(update.files.length, 'note')}.`;
+  const backedUp = update.files.length > 0 ? ' (previous versions copied to the trash)' : '';
+  const done = `Updated ${plural(update.links, 'link')} in ${plural(update.files.length, 'note')}${backedUp}.`;
   if (update.failed.length === 0) return done;
   logger.warn('Moved a note but could not update the links in some notes', { from, failed: update.failed });
   const list = update.failed.map((f) => `${f.file} (${f.error})`).join('; ');

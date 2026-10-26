@@ -43,7 +43,8 @@ make those settings identical on every device and on the headless instance.
 - `delete_note`, and `write_note`/`move_note` with `overwrite`, move the old file into `.trash/` (name: timestamp + flattened
   path). Copy it back out on the host; the folder is hidden from the vault tree, folder listings and search, and no
   tool can read or write it (hidden paths such as `.trash/` and `.obsidian/` are refused).
-- `edit_note` copies the note into `.trash/` before it changes it, under the same naming. LiveSync's own history, or the backup, is the way back for anything older.
+- `edit_note` copies the note into `.trash/` before it changes it, and `move_note` copies every note whose links it
+  rewrites, under the same naming. LiveSync's own history, or the backup, is the way back for anything older.
 - The `.trash/` folder is never emptied by this project.
 
 ## Calendar & Tasks sync

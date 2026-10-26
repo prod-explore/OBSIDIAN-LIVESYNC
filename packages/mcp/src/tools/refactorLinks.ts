@@ -27,15 +27,18 @@ function escapeRegExp(string: string) {
  *
  * Each note is read and written on its own: one that cannot be rewritten is recorded in `failed` and the rest are
  * still updated, so the caller can tell the client exactly which notes still point at the old path.
+ * `options.backup` runs before each note is rewritten; if it fails, that note is left as it was and counted as failed.
  *
  * @param vaultRoot Absolute path to the vault root
  * @param oldRelPath Relative path to the old note (e.g. 'folder/old.md' or 'old.md')
  * @param newRelPath Relative path to the new note (e.g. 'folder/new.md' or 'new.md')
+ * @param options.backup Keeps a copy of a note (vault-relative path) before it is rewritten
  */
 export async function updateBacklinks(
   vaultRoot: string,
   oldRelPath: string,
   newRelPath: string,
+  options: { backup?: (relPath: string) => Promise<unknown> } = {},
 ): Promise<BacklinkUpdate> {
   const files = await getAllMdFiles(vaultRoot);
 
@@ -98,6 +101,7 @@ export async function updateBacklinks(
       }
 
       if (newContent !== content) {
+        await options.backup?.(rel);
         await fs.writeFile(file, newContent, 'utf-8');
         result.links += links;
         result.files.push(rel);

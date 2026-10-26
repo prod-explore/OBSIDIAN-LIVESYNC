@@ -173,7 +173,7 @@ it exists; the file is yours to write, and `MCP_INSTRUCTIONS` replaces or (`none
 | `search_notes` | Case-insensitive substring search over note names and contents, at most 100 results | `{"query": "invoice"}` |
 | `write_note` | Creates a note and its folders; replaces one only with `overwrite: true`, old version to the trash | `{"path": "Inbox/Idea.md", "content": "# Idea"}` |
 | `edit_note` | Replaces a range of lines (`end_line = start_line - 1` inserts); old version copied to the trash | `{"path": "Inbox/Idea.md", "start_line": 1, "end_line": 1, "new_content": "# Better idea"}` |
-| `move_note` | Moves or renames a note and rewrites wikilinks and Markdown links to it | `{"from": "Inbox/Idea.md", "to": "Projects/Idea.md"}` |
+| `move_note` | Moves or renames a note and rewrites wikilinks and Markdown links to it; each rewritten note copied to the trash | `{"from": "Inbox/Idea.md", "to": "Projects/Idea.md"}` |
 | `delete_note` | Moves a note to `.trash/`; nothing is ever unlinked | `{"path": "Inbox/Idea.md"}` |
 
 ## How it works
@@ -207,7 +207,7 @@ The design limits what such a client can do; it does not judge intent.
 - **Inside the vault, outside hidden folders.** Every client path goes through `resolveVaultPath()`: `..`, absolute
   paths and symbolic links that lead out of the vault (or dangle) are refused, and so is any path through a hidden folder.
   `.obsidian/` holds the LiveSync plugin's CouchDB password and plugin code that headless Obsidian would run.
-- **Nothing is destroyed.** Delete, overwrite and edit keep the previous version in `.trash/`. Tools act on one note at a
+- **Nothing is destroyed.** Delete, overwrite, edit and the link rewrite of a move keep the previous version in `.trash/`. Tools act on one note at a
   time and refuse folders. There is no shell, no recursive operation and no permanent delete.
 - **Bounded.** At most 120 changes a minute for the whole server (`MCP_WRITE_LIMIT_PER_MINUTE`); request bodies up to
   5 MB (`MCP_BODY_LIMIT`).
