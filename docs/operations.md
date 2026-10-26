@@ -91,7 +91,8 @@ How notes map to events and tasks, and the sync's rules: [google-sync.md](google
   so the token may travel as `?token=`. The MCP server itself never logs a query string, and its logger masks `token=` wherever it
   appears. Proxies are the other place: [`deploy/nginx-obsidian.conf.example`](../deploy/nginx-obsidian.conf.example) logs the path
   only for `/mcp/`. nginx's error log still prints the full request line when an upstream error happens, so prefer the
-  `Authorization` header wherever the client allows it, and rotate `MCP_API_KEY` if a log leaves the machine.
+  `Authorization` header wherever the client allows it, and rotate `MCP_API_KEY` if a log leaves the machine. Generate
+  the key with `openssl rand -hex 32`: hex goes into a URL as it is.
 - **Logs.** `docker logs obsidian-mcp`: JSON lines like the sync's. A request with a missing or wrong token is logged as a warning with
   its method, status and path (`LOG_LEVEL=error` silences it); so is a body that is not valid JSON or is larger than
   `MCP_BODY_LIMIT` (5 MB by default; a bigger one is answered with 413). Both are logged as `Rejected a request body`, with `type` saying which.

@@ -109,8 +109,8 @@ cp .env.example .env
 openssl rand -hex 32                  # run once per secret: MCP_API_KEY, COUCHDB_PASSWORD, VNC_PASSWORD
 ```
 
-Use hex (or URL-safe) for `MCP_API_KEY`: a base64 key can contain `+`, which a client that sends the key as `?token=`
-must URL-encode, or the server reads it as a space and answers 403.
+Use hex for `MCP_API_KEY`: it needs no encoding in `?token=`. A base64 key still works there (the server reads a `+`
+that the query string turned into a space back as `+`), but hex leaves nothing to get wrong.
 Both `obsidian-headless` and `obsidian-gcal-sync` set `TZ=Europe/Warsaw` in `docker-compose.yml`; change it to yours.
 
 **2. Start CouchDB, headless Obsidian and the MCP server.**

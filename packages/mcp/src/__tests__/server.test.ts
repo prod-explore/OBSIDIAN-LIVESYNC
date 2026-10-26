@@ -250,6 +250,41 @@ test('a malformed body is a JSON 400, logged without the body and without a stac
   assert.ok(!/\n\s+at /.test(log), 'no stack trace');
 });
 
+test('a base64 key with + works in ?token= unencoded, encoded and as a header; a wrong one still does not', async () => {
+  const key = 'q+Wd7/ab+Zx9Lk0Nn3Rr2Ss1Tt5Uu8Vv6Ww4Xx0Yy=';
+  const keyed = createApp({ ...baseConfig, apiKey: key });
+  const srv = keyed.app.listen(0);
+  await new Promise((r) => srv.once('listening', r));
+  try {
+    const health = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/mcp/health`;
+    const status = async (url: string, init?: RequestInit) => (await fetch(url, init)).status;
+    // Pasted as it is: the query string turns each + into a space.
+    assert.equal(await status(`${health}?token=${key}`), 200);
+    assert.equal(await status(`${health}?token=${encodeURIComponent(key)}`), 200);
+    assert.equal(await status(health, { headers: { authorization: `Bearer ${key}` } }), 200);
+    // The space is only read back as + in the query string, and only a whole match counts.
+    assert.equal(await status(health, { headers: { authorization: `Bearer ${key.replaceAll('+', ' ')}` } }), 403);
+    assert.equal(await status(`${health}?token=${key.replace('q+', 'q-')}`), 403);
+  } finally {
+    keyed.sseRegistry.stopSweeping();
+    await new Promise((r) => srv.close(r));
+  }
+});
+
+test('a key that really holds a space still works in ?token=', async () => {
+  const keyed = createApp({ ...baseConfig, apiKey: 'two words' });
+  const srv = keyed.app.listen(0);
+  await new Promise((r) => srv.once('listening', r));
+  try {
+    const health = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/mcp/health`;
+    assert.equal((await fetch(`${health}?token=two%20words`)).status, 200);
+    assert.equal((await fetch(`${health}?token=two+words`)).status, 200);
+  } finally {
+    keyed.sseRegistry.stopSweeping();
+    await new Promise((r) => srv.close(r));
+  }
+});
+
 test('a body over the limit is a JSON 413, a note of a few hundred kB is not', async () => {
   const small = createApp({ ...baseConfig, bodyLimit: '1kb' });
   const srv = small.app.listen(0);

@@ -28,25 +28,35 @@ function createMcpServer(config: Config, limiter: WriteLimiter): McpServer {
 }
 
 /** The token from `Authorization: Bearer …`, or from `?token=` for clients that cannot set a header. */
-function extractToken(req: express.Request): string | undefined {
+function extractToken(req: express.Request): { token: string; fromQuery: boolean } | undefined {
   const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith('Bearer ')) return authHeader.split(' ')[1];
+  if (authHeader?.startsWith('Bearer ')) return { token: authHeader.split(' ')[1], fromQuery: false };
 
   const fromQuery = req.query.token;
-  if (typeof fromQuery === 'string') return fromQuery;
+  if (typeof fromQuery === 'string') return { token: fromQuery, fromQuery: true };
 
   return undefined;
 }
 
+/**
+ * Does the token match the key? A query string decodes an unencoded `+` to a space, so a base64 key pasted into a URL
+ * as it is arrives with spaces where it had `+`. A key never has both, so a query token with spaces is also tried
+ * with `+` in their place; the token as received is tried first, which keeps a key that really holds a space working.
+ */
+function tokenMatchesKey(token: string, fromQuery: boolean, apiKey: string): boolean {
+  if (tokensMatch(token, apiKey)) return true;
+  return fromQuery && token.includes(' ') && tokensMatch(token.replaceAll(' ', '+'), apiKey);
+}
+
 function requireAuth(config: Config, req: express.Request, res: express.Response): boolean {
-  const token = extractToken(req);
+  const supplied = extractToken(req);
   // req.path has no query string, so the token (which may arrive as ?token=) is never part of what is logged.
-  if (!token) {
+  if (!supplied) {
     logger.warn('Rejected a request: no token', { status: 401, method: req.method, path: req.path });
     res.status(401).json({ error: 'Unauthorized: Missing token' });
     return false;
   }
-  if (!tokensMatch(token, config.apiKey)) {
+  if (!tokenMatchesKey(supplied.token, supplied.fromQuery, config.apiKey)) {
     logger.warn('Rejected a request: wrong token', { status: 403, method: req.method, path: req.path });
     res.status(403).json({ error: 'Forbidden: Invalid API Key' });
     return false;

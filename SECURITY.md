@@ -26,6 +26,11 @@ The code in this repository, as deployed with the files in it:
 - **The deployment files**: `docker-compose.yml`, the Dockerfiles and `deploy/nginx-obsidian.conf.example`, where a
   default exposes more than the README says.
 
+## Keys
+
+Generate `MCP_API_KEY` and every other secret in `.env` with `openssl rand -hex 32`. Hex needs no encoding in a URL,
+which matters because the key may travel as `?token=`.
+
 ## Out of scope
 
 - CouchDB, Obsidian, the Self-hosted LiveSync plugin, nginx and Google's APIs themselves: report those upstream.
