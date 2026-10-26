@@ -4,9 +4,7 @@ A self-hosted Obsidian vault in one Docker Compose project: CouchDB keeps your d
 [Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync) plugin, an MCP server lets AI clients read and edit
 the notes over HTTPS, and a sync service keeps Google Calendar and Google Tasks in step with notes in the vault.
 
-[[Q1: Does this run for you day to day (on a Raspberry Pi?), since when, and with how many devices? One factual sentence here, e.g. "Runs my own vault on a Raspberry Pi 5 since …"]]
-
-[[Q2: Why did you build it? One sentence of motivation, e.g. what you wanted that Obsidian Sync or an existing MCP plugin did not give you.]]
+I use it every day for my own vault, on a Raspberry Pi 5.
 
 ```
  Obsidian on phone / laptop            AI client (Claude, …)                Google Calendar & Tasks
@@ -55,8 +53,6 @@ $ mcp delete_note '{"path":"Welcome.md"}'
 Moved to trash: Welcome.md → .trash/2026-10-25T20-44-42-312Z__Welcome.md
 ```
 
-[[Q3: Do you want a screenshot or short recording here (for example an AI client answering from the vault, or a task note next to the same task in Google Tasks)? There is no image in the repository yet; it must not show private notes or a client's data.]]
-
 ## Try the MCP server locally
 
 No Docker and no Google account needed. Requires Node.js 22 or newer, `curl` and `jq`.
@@ -99,7 +95,7 @@ Requirements: a Linux host with Docker Compose, a domain name, and a reverse pro
 (an [nginx example](deploy/nginx-obsidian.conf.example) is included). No container publishes a port; the proxy reaches
 them over a shared Docker network.
 
-[[Q4: On which hardware have you run the full stack (Raspberry Pi model and RAM, or x86 server)? Headless Obsidian is an Electron app and the heaviest container; a tested minimum belongs here.]]
+Runs on a Raspberry Pi 5 with 8 GB of RAM.
 
 **1. Configure.**
 
@@ -162,8 +158,6 @@ Prefer the header: a token in a URL can end up in a proxy's error log
 ([details](docs/operations.md#mcp-server)). On connect, every client is told to read `_Systems/AGENTS.md` in the vault if
 it exists; the file is yours to write, and `MCP_INSTRUCTIONS` replaces or (`none`) removes the hint.
 
-[[Q5: Which MCP clients have you connected (Claude.ai custom connector, Claude Desktop, Claude Code, others)? A "tested with" line here, and a config snippet for the one you use most.]]
-
 ## MCP tools
 
 | Tool | What it does | Example arguments |
@@ -194,8 +188,6 @@ detected by a hash of the synced fields, not by file time, which LiveSync change
 last write, and the losing version is written to a log in the vault. Deleting a note deletes the item in Google, so
 deletions stop when part of the vault could not be read, or when most of a list disappears at once (an unmounted volume
 looks exactly like that). The full rules: [docs/google-sync.md](docs/google-sync.md).
-
-[[Q6: Do you want a short comparison with alternatives (Obsidian Sync, the Local REST API plugin with an MCP bridge, other Obsidian MCP servers)? Only if you can confirm each point; otherwise this stays out.]]
 
 ### Security model
 
