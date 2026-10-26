@@ -10,7 +10,7 @@ import { isArchivedPath, listNameOfFolder, toActive, toArchive } from '../folder
 import { computeSyncHash } from '../hash.js';
 import type { ScannedNote } from '../scan.js';
 import { scanTasks } from '../scan.js';
-import { findTasklistId, resolveTasklistId } from '../tasklists.js';
+import { findTasklistId, getTasklists, resolveTasklistId } from '../tasklists.js';
 import type { NoteKind } from './folder.js';
 import { fallbackTitle, insertWithMarker, saveNote, type PushOutcome } from './shared.js';
 
@@ -21,7 +21,7 @@ export const taskKind: NoteKind<TaskNote> = {
   containerOf: async (ctx, entry) => entry.note.tasklist_id || findTasklistId(ctx, listNameOfFolder(entry.relFolder)),
   manifest: (state) => state.knownTaskIds,
   async hasMoved(ctx, entry) {
-    const target = await resolveTasklistId(ctx, listNameOfFolder(entry.relFolder));
+    const target = await listOfFolder(ctx, entry.relFolder);
     return Boolean(target && entry.note.tasklist_id && entry.note.tasklist_id !== target);
   },
   push: pushTaskNote,
@@ -30,8 +30,21 @@ export const taskKind: NoteKind<TaskNote> = {
   },
 };
 
+/**
+ * The list a note's folder stands for. An active folder with no list gets one; an archive folder never does
+ * (archived means archived), so for one that matches no list this is undefined.
+ */
+function listOfFolder(ctx: SyncContext, relFolder: string): Promise<string | undefined> {
+  const listName = listNameOfFolder(relFolder);
+  return isArchivedPath(relFolder) ? findTasklistId(ctx, listName) : resolveTasklistId(ctx, listName);
+}
+
 /** Creates or updates the task on Google, then files the note under 04-Archive or back out of it to match its status. */
-async function pushTaskNote(ctx: SyncContext, entry: ScannedNote<TaskNote>, isNew: boolean): Promise<PushOutcome> {
+async function pushTaskNote(
+  ctx: SyncContext,
+  entry: ScannedNote<TaskNote>,
+  isNew: boolean,
+): Promise<PushOutcome | undefined> {
   const { tasks, config, state } = ctx;
   const note: TaskNote = { ...entry.note };
 
@@ -39,8 +52,15 @@ async function pushTaskNote(ctx: SyncContext, entry: ScannedNote<TaskNote>, isNe
   // No fallback to some other list when Google cannot be asked: filing the task in the wrong list now would
   // only be undone (delete and re-create) by the next cycle. The error is logged by the caller and retried.
   const listName = listNameOfFolder(entry.relFolder);
-  const tasklistId = await resolveTasklistId(ctx, listName);
-  if (!tasklistId) throw new Error(`could not determine the Google task list for "${listName}"`);
+  const tasklistId = await listOfFolder(ctx, entry.relFolder);
+  if (!tasklistId) {
+    if (!(await getTasklists(ctx))) throw new Error(`could not determine the Google task list for "${listName}"`);
+    ctx.flag(
+      entry.relative,
+      `its archive folder "${listName}" stands for no task list, and archived folders never create one`,
+    );
+    return undefined;
+  }
 
   let create = isNew;
   if (!create && note.google_id && note.tasklist_id && note.tasklist_id !== tasklistId) {

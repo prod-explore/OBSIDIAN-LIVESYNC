@@ -204,3 +204,72 @@ test('a note with a google_id but no tasklist_id counts for the list of its fold
   assert.equal(tasks.calls.tasks.delete.length, 0);
   assert.deepEqual(state.knownTaskIds.L2, ['g1']);
 });
+
+test('lists whose names make the same folder name get one folder each, numbered, and keep them', async () => {
+  const config = await makeVault();
+  const state = emptyState();
+  const lists = [
+    { id: 'L1', title: 'My Tasks' },
+    { id: 'L2', title: 'Shopping' },
+    { id: 'L3', title: 'Shopping' },
+    { id: 'L4', title: 'Shopping' },
+    { id: 'L5', title: 'Work: Q4' },
+    { id: 'L6', title: 'Work- Q4' },
+  ];
+  await cycle(config, state, lists);
+  assert.deepEqual(state.tasklistFolders, {
+    L2: 'Shopping',
+    L3: 'Shopping (2)',
+    L4: 'Shopping (3)',
+    L5: 'Work- Q4',
+    L6: 'Work- Q4 (2)',
+  });
+
+  // Next cycle: nothing is renamed or created, a pulled task lands in its own list's folder, and a note written in
+  // a numbered folder goes to that list.
+  await writeNote(config, '{Tasks}/Shopping (2)/Mine.md', { title: 'Mine', status: 'needsAction' });
+  const tasks = fakeTasks(
+    { lists, defaultId: 'L1' },
+    {
+      list: (p) => ({
+        data: {
+          items:
+            p.tasklist === 'L3'
+              ? [{ id: 'pulled00x', title: 'Eggs', status: 'needsAction', updated: '2026-10-01T00:00:00.000Z' }]
+              : [],
+        },
+      }),
+    },
+  );
+  await ingest(config, state, fakeCalendar().client, tasks.client);
+  await push(config, state, fakeCalendar().client, tasks.client);
+
+  assert.deepEqual(state.tasklistFolders.L3, 'Shopping (2)');
+  assert.equal(tasks.calls.lists.insert.length + tasks.calls.lists.patch.length, 0);
+  const inFolder = await fs.readdir(path.join(config.vaultResolved, '{Tasks}/Shopping (2)'));
+  assert.ok(
+    inFolder.some((f) => f.includes('Eggs')),
+    inFolder.join(', '),
+  );
+  assert.deepEqual(
+    tasks.calls.tasks.insert.map((c) => c.tasklist),
+    ['L3'],
+  );
+});
+
+test('a folder that exists only in the archive never creates a list', async () => {
+  const config = await makeVault();
+  const state = emptyState();
+  const lists = [{ id: 'L1', title: 'My Tasks' }];
+  await mkdir(config, '04-Archive/{Tasks}/Old project');
+  await writeNote(config, '04-Archive/{Tasks}/Old project/Done.md', { title: 'Done', status: 'completed' });
+
+  const tasks = google(lists);
+  await ingest(config, state, fakeCalendar().client, tasks.client);
+  const ctx = await push(config, state, fakeCalendar().client, tasks.client);
+  assert.equal(tasks.calls.lists.insert.length, 0);
+  assert.equal(tasks.calls.tasks.insert.length, 0);
+  assert.equal(await exists(config, '{Tasks}/Old project'), false);
+  assert.match(ctx.report.problems.get('04-Archive/{Tasks}/Old project/Done.md') ?? '', /never create one/);
+  assert.equal(ctx.report.errors, 0, 'a note left alone on purpose is not a failure');
+});

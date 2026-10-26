@@ -118,7 +118,8 @@ async function subfolders(ctx: SyncContext, relFolder: string): Promise<Set<stri
  * renamed folder). In this order:
  *
  * 1. A list Google has and the vault does not know gets its folder. A list renamed in Google has its folder (and the
- *    folder's archive mirror) renamed, unless a folder with the new name is already there.
+ *    folder's archive mirror) renamed, unless a folder with the new name is already there. Two lists whose titles make
+ *    the same folder name get one folder each: the one recorded first keeps the name, the next gets " (2)", and so on.
  * 2. A known list whose folder is gone was renamed in the vault if its notes are now all in one folder that stands for
  *    no list: the list is renamed in Google. Without that evidence the folder is created again, empty: the list still
  *    exists, and deleting it is never done automatically.
@@ -151,21 +152,24 @@ export async function syncTasklistFolders(ctx: SyncContext): Promise<void> {
   for (const list of lists) {
     const title = titleAsFolder(list);
     const folder = recorded[list.id];
-    if (folder === undefined || (folder !== title && !active.has(folder) && !archive.has(folder))) {
-      recorded[list.id] = title; // new to the sync, or renamed while its folder was gone
-      await makeFolder(title);
-    } else if (folder !== title) {
-      if (active.has(title) || archive.has(title)) {
-        ctx.flag(taskFolder(title), `the list "${folder}" was renamed in Google to a name that already has a folder`);
-        continue;
-      }
-      await renameFolder(ctx, folder, title, active, archive);
-      await makeFolder(title); // when only the archive mirror existed
-      recorded[list.id] = title;
-      ctx.log.info('Renamed a list folder after the list was renamed in Google', { from: folder, to: title });
-    } else if (!active.has(folder)) {
-      missing.push({ id: list.id, folder });
+    if (folder !== undefined && isFolderFor(folder, title)) {
+      if (!active.has(folder)) missing.push({ id: list.id, folder });
+      continue;
     }
+    const target = freeFolderName(recorded, title, list.id);
+    if (folder === undefined || (!active.has(folder) && !archive.has(folder))) {
+      recorded[list.id] = target; // new to the sync, or renamed while its folder was gone
+      await makeFolder(target);
+      continue;
+    }
+    if (active.has(target) || archive.has(target)) {
+      ctx.flag(taskFolder(target), `the list "${folder}" was renamed in Google to a name that already has a folder`);
+      continue;
+    }
+    await renameFolder(ctx, folder, target, active, archive);
+    await makeFolder(target); // when only the archive mirror existed
+    recorded[list.id] = target;
+    ctx.log.info('Renamed a list folder after the list was renamed in Google', { from: folder, to: target });
   }
 
   const known = new Set([...Object.values(recorded), ...info.lists.map(titleAsFolder)]);
@@ -216,6 +220,19 @@ export async function syncTasklistFolders(ctx: SyncContext): Promise<void> {
 
   // 3. Vault → Google: a new folder
   for (const name of unknown) await createList(ctx, info, name);
+}
+
+/** Is `folder` the folder of a list titled `title`: the title itself, or the title with a " (n)" suffix? */
+function isFolderFor(folder: string, title: string): boolean {
+  return folder === title || (folder.startsWith(`${title} (`) && /^ \(\d+\)$/.test(folder.slice(title.length)));
+}
+
+/** The title, or the first "title (n)" from 2 up that no other list's folder has taken. */
+function freeFolderName(recorded: Record<string, string>, title: string, ownId: string): string {
+  const taken = new Set(Object.entries(recorded).flatMap(([id, folder]) => (id === ownId ? [] : [folder])));
+  let name = title;
+  for (let n = 2; taken.has(name); n++) name = `${title} (${n})`;
+  return name;
 }
 
 /** Renames a list's folder and its archive mirror, each only where it exists. */
