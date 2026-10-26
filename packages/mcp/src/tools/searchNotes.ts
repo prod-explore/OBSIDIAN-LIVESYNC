@@ -20,7 +20,7 @@ async function walkAndSearch(
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (results.length >= limit) return;
-    if (entry.name.startsWith('.')) continue; // hidden files and folders, the trash included
+    if (entry.name.startsWith('.')) continue; // hidden files and folders, the default .trash included
     if (entry.isSymbolicLink()) continue; // never follow links: they may lead out of the vault
     const full = path.resolve(dir, entry.name);
     if (entry.isDirectory()) {

@@ -117,7 +117,7 @@ export async function updateBacklinks(
 async function getAllMdFiles(dir: string, fileList: string[] = []): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue; // hidden folders (.obsidian, the trash) hold no notes to rewrite
+    if (entry.name.startsWith('.')) continue; // hidden folders (.obsidian, the default .trash) hold no notes to rewrite
 
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {

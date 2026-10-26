@@ -16,8 +16,9 @@ import { updateBacklinks, type BacklinkUpdate } from './refactorLinks.js';
  * - An existing note at `to` is replaced only with `overwrite: true`, so a client has to state that it means to
  *   replace something rather than do it through a mistyped destination. The replaced note goes to the trash.
  * - fs.rename, not copy and delete: on one file system it is atomic, so a crash cannot leave two copies or none.
- * - Links are rewritten after the move (see updateBacklinks), each changed note copied to the trash first. The move stands whatever happens to them, and the
- *   result names every note whose links could not be rewritten, so the client can fix those by hand.
+ * - Links are rewritten after the move (see updateBacklinks), each changed note copied to the trash first. The move
+ *   stands whatever happens to them, and the result names every note whose links could not be rewritten, so the
+ *   client can fix those by hand.
  */
 export function registerMoveNote(server: McpServer, ctx: ToolContext): void {
   const { config } = ctx;
