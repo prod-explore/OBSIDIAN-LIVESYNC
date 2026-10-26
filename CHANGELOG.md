@@ -17,6 +17,7 @@ All notable changes. Format after [Keep a Changelog](https://keepachangelog.com/
 
 ### Fixed
 - MCP: `move_note` reported "Updated N backlink(s)" counting notes, and one note that could not be rewritten stopped the rest and was only logged. It now counts links and notes, rewrites every note it can, and names each note it could not.
+- Sync: renaming a note rewrote only links that spelled its name in the same case. Obsidian resolves `[[team sync]]` to `Team Sync.md`, so such links broke; they are now rewritten too.
 
 ### Changed
 - Sync: `_Systems/sync-conflicts.md` records the whole front matter of the edit that lost, not only its title and time.

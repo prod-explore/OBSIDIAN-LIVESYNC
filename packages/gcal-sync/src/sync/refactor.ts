@@ -5,7 +5,8 @@ import type { SyncContext } from './context.js';
 
 /**
  * Moves a note inside the vault and, when its file name changed, rewrites `[[OldName]]`, `[[OldName|Alias]]` and
- * `[[OldName#Heading]]` in every note to the new name. Equal paths are a no-op; hidden folders are not scanned.
+ * `[[OldName#Heading]]` in every note to the new name, whatever the case of the name in the link. Equal paths are a
+ * no-op; hidden folders are not scanned.
  */
 export async function renameAndRefactorLinks(
   ctx: SyncContext,
@@ -32,7 +33,8 @@ export async function renameAndRefactorLinks(
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   // [[OldStem]], [[OldStem|Alias]], [[OldStem#Heading]]; the character after the name is kept as $1.
-  const regex = new RegExp(`\\[\\[${esc(oldStem)}([\\]|#])`, 'g');
+  // Case-insensitive because Obsidian resolves [[old stem]] to `Old Stem.md` too; such a link would break otherwise.
+  const regex = new RegExp(`\\[\\[${esc(oldStem)}([\\]|#])`, 'gi');
 
   let updatedCount = 0;
 
