@@ -173,12 +173,21 @@ export function createApp(config: Config): { app: express.Express; sseRegistry: 
   );
 
   // Legacy SSE: the GET opens the stream, and the client posts its messages to /mcp/messages with the session id.
+  // Both requests carry the token: the session id alone is never accepted as proof of identity.
   app.get(
     '/mcp/sse',
     handle('GET /mcp/sse', async (req, res) => {
       if (!requireAuth(config, req, res)) return;
 
-      const transport = new SSEServerTransport('/mcp/messages', res);
+      // A client that authenticated with ?token= cannot set a header, and the SDK client posts to the endpoint it is
+      // told here (query string dropped by some clients). Telling it the endpoint with the token keeps those clients
+      // working; the value only travels inside the stream the same token just opened.
+      const queryToken = req.query.token;
+      const endpoint =
+        typeof queryToken === 'string' && !req.headers.authorization
+          ? `/mcp/messages?token=${encodeURIComponent(queryToken)}`
+          : '/mcp/messages';
+      const transport = new SSEServerTransport(endpoint, res);
       const connectionServer = createMcpServer(config, writeLimiter);
 
       await connectionServer.connect(transport);
@@ -198,6 +207,8 @@ export function createApp(config: Config): { app: express.Express; sseRegistry: 
   app.post(
     '/mcp/messages',
     handle('POST /mcp/messages', async (req, res) => {
+      if (!requireAuth(config, req, res)) return;
+
       const sessionId = req.query.sessionId;
       if (typeof sessionId !== 'string') {
         res.status(400).send('Missing or invalid sessionId');

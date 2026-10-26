@@ -79,27 +79,86 @@ test('streamable HTTP and the legacy SSE entry point both refuse an unauthentica
   assert.equal((await fetch(`${base}/mcp/sse`)).status, 401);
 });
 
+test('posting a message needs the token: without one it is a 401, with a wrong one a 403', async () => {
+  const noToken = await fetch(`${base}/mcp/messages?sessionId=nope`, {
+    method: 'POST',
+    body: '{}',
+    headers: { 'content-type': 'application/json' },
+  });
+  assert.equal(noToken.status, 401);
+  const wrongToken = await fetch(`${base}/mcp/messages?sessionId=nope`, {
+    method: 'POST',
+    body: '{}',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer not-the-key' },
+  });
+  assert.equal(wrongToken.status, 403);
+});
+
 test('posting a message for an unknown SSE session is a 404, a missing id a 400', async () => {
+  const headers = { 'content-type': 'application/json', authorization: `Bearer ${KEY}` };
   assert.equal(
-    (
-      await fetch(`${base}/mcp/messages?sessionId=nope`, {
-        method: 'POST',
-        body: '{}',
-        headers: { 'content-type': 'application/json' },
-      })
-    ).status,
+    (await fetch(`${base}/mcp/messages?sessionId=nope`, { method: 'POST', body: '{}', headers })).status,
     404,
   );
-  assert.equal(
-    (
-      await fetch(`${base}/mcp/messages`, {
+  assert.equal((await fetch(`${base}/mcp/messages`, { method: 'POST', body: '{}', headers })).status, 400);
+});
+
+/** Opens a legacy SSE stream and returns the endpoint the server announces plus a way to close it. */
+async function openSse(
+  url: string,
+  headers: Record<string, string> = {},
+): Promise<{ endpoint: string; close: () => void }> {
+  const controller = new AbortController();
+  const res = await fetch(url, { headers, signal: controller.signal });
+  assert.equal(res.status, 200);
+  const reader = res.body!.getReader();
+  let seen = '';
+  while (!/event: endpoint\ndata: (.+)\n/.test(seen)) {
+    const { value, done } = await reader.read();
+    assert.ok(!done, 'stream ended before the endpoint event');
+    seen += new TextDecoder().decode(value);
+  }
+  const endpoint = /event: endpoint\ndata: (.+)\n/.exec(seen)![1];
+  return { endpoint, close: () => controller.abort() };
+}
+
+const INITIALIZE = JSON.stringify({
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'initialize',
+  params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '0' } },
+});
+
+test('a legacy SSE session opened with a header posts with the header, and the session id alone is refused', async () => {
+  const { endpoint, close } = await openSse(`${base}/mcp/sse`, { authorization: `Bearer ${KEY}` });
+  try {
+    assert.ok(!endpoint.includes('token='), 'a header client is not handed the token back');
+    const post = (headers: Record<string, string>) =>
+      fetch(`${base}${endpoint}`, {
         method: 'POST',
-        body: '{}',
-        headers: { 'content-type': 'application/json' },
-      })
-    ).status,
-    400,
-  );
+        body: INITIALIZE,
+        headers: { 'content-type': 'application/json', ...headers },
+      });
+    assert.equal((await post({})).status, 401);
+    assert.equal((await post({ authorization: `Bearer ${KEY}` })).status, 202);
+  } finally {
+    close();
+  }
+});
+
+test('a legacy SSE session opened with ?token= is told an endpoint that carries the token', async () => {
+  const { endpoint, close } = await openSse(`${base}/mcp/sse?token=${encodeURIComponent(KEY)}`);
+  try {
+    assert.ok(endpoint.includes('sessionId='));
+    const res = await fetch(`${base}${endpoint}`, {
+      method: 'POST',
+      body: INITIALIZE,
+      headers: { 'content-type': 'application/json' },
+    });
+    assert.equal(res.status, 202);
+  } finally {
+    close();
+  }
 });
 
 test('an authenticated MCP client can list the tools the README documents', async () => {

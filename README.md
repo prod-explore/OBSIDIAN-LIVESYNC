@@ -156,7 +156,7 @@ recovery: [docs/operations.md](docs/operations.md).
 |---|---|
 | URL | `https://<your domain>/mcp/sse` |
 | Transport | Streamable HTTP (`POST`), stateless; legacy SSE (`GET`, messages to `/mcp/messages`) for older clients |
-| Auth | `Authorization: Bearer <MCP_API_KEY>`, or `?token=<MCP_API_KEY>` for clients that only take a URL |
+| Auth | `Authorization: Bearer <MCP_API_KEY>`, or `?token=<MCP_API_KEY>` for clients that only take a URL; every request needs it, including the legacy SSE message posts |
 
 Prefer the header: a token in a URL can end up in a proxy's error log
 ([details](docs/operations.md#mcp-server)). On connect, every client is told to read `_Systems/AGENTS.md` in the vault if
