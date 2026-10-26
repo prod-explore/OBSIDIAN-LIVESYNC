@@ -39,7 +39,10 @@ function listOfFolder(ctx: SyncContext, relFolder: string): Promise<string | und
   return isArchivedPath(relFolder) ? findTasklistId(ctx, listName) : resolveTasklistId(ctx, listName);
 }
 
-/** Creates or updates the task on Google, then files the note under 04-Archive or back out of it to match its status. */
+/**
+ * Creates or updates the task on Google, then files the note under 04-Archive or back out of it to match its status.
+ * Returns undefined, with the note flagged, when its folder stands for no list the task may go to.
+ */
 async function pushTaskNote(
   ctx: SyncContext,
   entry: ScannedNote<TaskNote>,
@@ -48,7 +51,8 @@ async function pushTaskNote(
   const { tasks, config, state } = ctx;
   const note: TaskNote = { ...entry.note };
 
-  // "{Tasks}" and "04-Archive/{Tasks}" are the default list; "{Tasks}/Project A" and its archive mirror are "Project A".
+  // "{Tasks}" and "04-Archive/{Tasks}" are the default list; "{Tasks}/Project A" and its archive mirror are
+  // "Project A".
   // No fallback to some other list when Google cannot be asked: filing the task in the wrong list now would
   // only be undone (delete and re-create) by the next cycle. The error is logged by the caller and retried.
   const listName = listNameOfFolder(entry.relFolder);
@@ -66,7 +70,8 @@ async function pushTaskNote(
 
   let create = isNew;
   if (!create && note.google_id && note.tasklist_id && note.tasklist_id !== tasklistId) {
-    // The note was moved to another list's folder in Obsidian: the task is deleted from the old list and created in the new one.
+    // The note was moved to another list's folder in Obsidian: the task is deleted from the old list and created in
+    // the new one.
     try {
       await tasks.tasks.delete({ tasklist: note.tasklist_id, task: note.google_id });
       ctx.log.info('Task moved to another list; deleted it from the old one', {
@@ -135,7 +140,8 @@ async function pushTaskNote(
       await fs.rename(entry.fullPath, targetPath);
       ctx.log.info(shouldArchive ? 'Archived task' : 'Unarchived task', { path: targetRelative });
     } catch (err) {
-      // Non-fatal: the content is written correctly where the file is; the next ingest moves it once Google confirms the status.
+      // Non-fatal: the content is written correctly where the file is; the next ingest moves it once Google confirms
+      // the status.
       ctx.log.warn(`Could not ${shouldArchive ? 'archive' : 'unarchive'} ${entry.file}`, { error: errorMessage(err) });
     }
   }

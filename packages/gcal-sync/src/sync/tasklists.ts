@@ -15,7 +15,10 @@ import { scanTasks } from './scan.js';
 
 export interface TasklistInfo {
   lists: tasks_v1.Schema$TaskList[];
-  /** The id behind the alias "@default"; its tasks live directly in {Tasks}/, other lists in a subfolder named after them. */
+  /**
+   * The id behind the alias "@default"; its tasks live directly in {Tasks}/, other lists in a subfolder named after
+   * them.
+   */
   defaultId: string | undefined;
 }
 
@@ -25,7 +28,9 @@ const lookups = new WeakMap<tasks_v1.Tasks, TasklistInfo>();
 // A failed lookup is remembered the same way, so one outage is one error in the log, not one per note.
 const failed = new WeakSet<tasks_v1.Tasks>();
 
-/** All task lists of the account, or null when Google could not be asked (callers skip the work and retry next cycle). */
+/**
+ * All task lists of the account, or null when Google could not be asked (callers skip the work and retry next cycle).
+ */
 export async function getTasklists(ctx: SyncContext): Promise<TasklistInfo | null> {
   const { tasks } = ctx;
   const known = lookups.get(tasks);
@@ -157,11 +162,13 @@ function forgetList(ctx: SyncContext, id: string) {
  *    Google, its archive mirror going to the trash. An empty folder or list is not a deleted one: it stays.
  * 5. A folder that stands for no list gets a new list.
  *
- * Steps 3 to 5, and step 2 when no folder holds the list's notes, need a full view of the vault and wait for a cycle
- * in which every task note could be read; this function only runs once Google's lists were listed. A deletion in the
+ * Steps 3 to 5, and step 2 unless exactly one folder holds the list's notes, need a full view of the vault and wait
+ * for a cycle in which every task note could be read; nothing runs until Google's lists were listed. A deletion in the
  * vault also needs {Tasks}/ itself to be there and is held back, like push's, when most lists vanish at once (an
- * unmounted volume looks exactly like that) unless ALLOW_MASS_DELETE is set. Returns the lists whose folder is not settled yet: their tasks are not
- * pulled this cycle, so a pulled task cannot bring back a folder that was renamed.
+ * unmounted volume looks exactly like that) unless ALLOW_MASS_DELETE is set.
+ *
+ * Returns the lists whose folder is not settled yet: their tasks are not pulled this cycle, so a pulled task cannot
+ * bring back a folder that was renamed.
  */
 export async function syncTasklistFolders(ctx: SyncContext): Promise<Set<string>> {
   const unsettled = new Set<string>();
@@ -169,7 +176,8 @@ export async function syncTasklistFolders(ctx: SyncContext): Promise<Set<string>
   if (!info) return unsettled;
   const activeListing = await subfolders(ctx, taskFolder(DEFAULT_LIST));
   const archiveListing = await subfolders(ctx, toArchive(taskFolder(DEFAULT_LIST)));
-  if (!activeListing || !archiveListing) return unsettled; // a folder that cannot be listed would look like a deleted one
+  // A folder that cannot be listed would look like a deleted one.
+  if (!activeListing || !archiveListing) return unsettled;
   const active = activeListing.names;
   const archive = archiveListing.names;
 
@@ -247,7 +255,8 @@ export async function syncTasklistFolders(ctx: SyncContext): Promise<Set<string>
       if (home !== target) await renameFolder(ctx, home, target, active, new Set());
       forget(home);
     }
-    await makeFolder(target); // no folder holds its notes: it was removed in the vault, and comes back
+    // When no folder holds its notes, its folder was removed in the vault as well: it comes back under the new name.
+    await makeFolder(target);
     if (archive.has(folder)) await renameFolder(ctx, folder, target, new Set(), archive);
     recorded[id] = target;
     ctx.log.info('A list was renamed in Google and in the vault; its folder takes the name from Google', {

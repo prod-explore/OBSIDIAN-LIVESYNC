@@ -18,7 +18,10 @@ export interface NoteKind<N extends NoteFields> {
   manifest(state: SyncState): Record<string, string[]>;
   /** An existing item whose note was moved to another list in the vault. */
   hasMoved?(ctx: SyncContext, entry: ScannedNote<N>): Promise<boolean>;
-  /** Creates or updates the item on Google and brings the note up to date. Returns undefined when it left the note alone. */
+  /**
+   * Creates or updates the item on Google and brings the note up to date. Returns undefined when it left the note
+   * alone.
+   */
   push(ctx: SyncContext, entry: ScannedNote<N>, isNew: boolean): Promise<PushOutcome | undefined>;
   deleteRemote(ctx: SyncContext, containerId: string, id: string): Promise<void>;
 }
@@ -86,7 +89,8 @@ export async function pushKind<N extends NoteFields>(ctx: SyncContext, kind: Not
   }
 
   if (!complete) {
-    // Some of the vault could not be read, so a missing note may just be one that was not looked at.
+    // Some of the vault could not be read, or a note's list or calendar could not be told, so a missing note may
+    // just be one that was not counted.
     ctx.log.warn(`Skipping deletions of ${kind.noun}s on Google: the vault was not fully readable this cycle`);
     return;
   }
@@ -135,7 +139,8 @@ async function deleteVanished<N extends NoteFields>(
         await kind.deleteRemote(ctx, containerId, id);
         ctx.log.info(`Deleted a ${kind.noun} on Google (its note was removed from the vault)`, { googleId: id });
       } catch (err) {
-        // 404 / 410: already gone on Google, which is what was wanted. Anything else stays in the manifest and is retried.
+        // 404 / 410: already gone on Google, which is what was wanted. Anything else stays in the manifest and is
+        // retried.
         if (!isAlreadyGone(err)) {
           ctx.fail(`Could not delete ${kind.noun} ${id}`, err);
           continue;
