@@ -17,7 +17,7 @@ import { DEFAULT_LIST, isArchivedPath, taskFolder, toActive, toArchive } from '.
 import { computeSyncHash, isLocallyModified } from './hash.js';
 import { renameAndRefactorLinks } from './refactor.js';
 import { readEventFile, readTaskFile, scanEvents, scanTasks } from './scan.js';
-import { getTasklists } from './tasklists.js';
+import { folderOfList, getTasklists, syncTasklistFolders } from './tasklists.js';
 
 /** Events further ahead than this are not brought in: an endless recurrence would otherwise fill the vault. */
 const MAX_DAYS_AHEAD = 730;
@@ -229,6 +229,7 @@ async function ingestTasks(ctx: SyncContext) {
   const { state, tasks } = ctx;
   const tasklists = await getTasklists(ctx);
   if (!tasklists) return; // Google could not be asked for the lists; the next cycle retries
+  await syncTasklistFolders(ctx);
 
   const getIndex: () => Promise<Index> = lazy(async () => indexWinners('task', (await scanTasks(ctx)).notes));
 
@@ -236,7 +237,7 @@ async function ingestTasks(ctx: SyncContext) {
     const tasklistId = listObj.id;
     if (!tasklistId) continue;
     const isDefault = tasklistId === tasklists.defaultId;
-    const listName = sanitizeTitle(listObj.title || 'Untitled List');
+    const listName = folderOfList(ctx, listObj);
     const lastSync = state.tasksTokens[tasklistId];
     let pageToken: string | undefined;
     let newest: string | undefined; // highest `updated` seen in this pass
@@ -283,7 +284,7 @@ async function ingestTasks(ctx: SyncContext) {
 interface TaskList {
   tasklistId: string;
   isDefault: boolean;
-  /** The list's title as a file name. */
+  /** The list's folder under {Tasks}/ (its title as a file name, unless a rename is still being carried over). */
   listName: string;
 }
 

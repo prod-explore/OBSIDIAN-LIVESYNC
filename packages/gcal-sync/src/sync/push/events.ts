@@ -16,7 +16,7 @@ import { fallbackTitle, insertWithMarker, saveNote, type PushOutcome } from './s
 export const eventKind: NoteKind<EventNote> = {
   noun: 'event',
   scan: scanEvents,
-  containerOf: (ctx, note) => note.calendar_id || ctx.config.calendarIds[0],
+  containerOf: async (ctx, { note }) => note.calendar_id || ctx.config.calendarIds[0],
   manifest: (state) => state.knownEventIds,
   push: pushEventNote,
   async deleteRemote(ctx, calendarId, id) {

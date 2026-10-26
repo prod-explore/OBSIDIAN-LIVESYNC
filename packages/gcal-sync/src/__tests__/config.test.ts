@@ -15,7 +15,6 @@ const KEYS = [
   'GOOGLE_CLIENT_SECRET',
   'GOOGLE_REFRESH_TOKEN',
   'CALENDAR_IDS',
-  'TASKLIST_IDS',
   'POLL_INTERVAL_MINUTES',
   'ALLOW_MASS_DELETE',
   'CANCELLED_RETENTION_DAYS',
@@ -37,19 +36,17 @@ function withEnv<T>(env: Record<string, string>, fn: () => T, without: string[] 
   }
 }
 
-test('defaults: primary calendar, default task list, every 5 minutes, mass deletion off', () => {
+test('defaults: primary calendar, every 5 minutes, mass deletion off', () => {
   const c = withEnv({}, loadConfig);
   assert.deepEqual(c.calendarIds, ['primary']);
-  assert.deepEqual(c.tasklistIds, ['@default']);
   assert.equal(c.pollIntervalMinutes, 5);
   assert.equal(c.allowMassDelete, false);
   assert.equal(c.cancelledRetentionDays, 30);
 });
 
-test('id lists are split on commas and trimmed', () => {
-  const c = withEnv({ CALENDAR_IDS: ' primary , work@group.calendar.google.com ,', TASKLIST_IDS: 'a,b' }, loadConfig);
+test('calendar ids are split on commas and trimmed', () => {
+  const c = withEnv({ CALENDAR_IDS: ' primary , work@group.calendar.google.com ,' }, loadConfig);
   assert.deepEqual(c.calendarIds, ['primary', 'work@group.calendar.google.com']);
-  assert.deepEqual(c.tasklistIds, ['a', 'b']);
 });
 
 test('a missing credential is an error that names the variable', () => {

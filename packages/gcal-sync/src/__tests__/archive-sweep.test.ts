@@ -24,7 +24,6 @@ function fakeConfig(vaultResolved: string): Config {
     clientSecret: 'x',
     refreshToken: 'x',
     calendarIds: ['primary'],
-    tasklistIds: [],
     pollIntervalMinutes: 15,
     allowMassDelete: false,
     cancelledRetentionDays: 30,

@@ -10,15 +10,33 @@ The sync works inside the vault (`VAULT_PATH`, `/vault/vault-mcp` in the contain
 | Path | Holds |
 |---|---|
 | `{Tasks}/` | Open tasks of the default Google Tasks list |
-| `{Tasks}/<List name>/` | Open tasks of any other list; the folder is named after the list |
+| `{Tasks}/<List name>/` | Open tasks of any other list; one folder per list, named after it |
 | `{Calendar}/YYYY-MM/` | Events of the current and future months |
 | `04-Archive/{Tasks}/...` | Completed and cancelled tasks, same subfolder as their list |
 | `04-Archive/{Calendar}/YYYY-MM/` | Events of months that are over (by UTC month) |
 | `_Systems/sync-conflicts.md` | Log of every decision the sync made against a local edit |
 | `_Systems/duplicates/` | Copies set aside when two notes carried the same `google_id` |
 
-Every Google Tasks list in the account is pulled, each into its own folder. Calendars are pulled only when they are listed
-in `CALENDAR_IDS`.
+Calendars are pulled only when they are listed in `CALENDAR_IDS`. Task lists are not configured: every list in the account
+is synced, and the lists and the subfolders of `{Tasks}/` are kept in step like the notes.
+
+## Task lists and folders
+
+Each Google Tasks list other than the default one is a subfolder of `{Tasks}/` (nested folders belong to the list of their
+first level). At the start of each cycle, before any task is pulled:
+
+- A list made in Google gets its folder, even while it is empty. A folder made in `{Tasks}/` gets a list, even while it is
+  empty.
+- A list renamed in Google has its folder and its `04-Archive/{Tasks}/` mirror renamed. If a folder with the new name is
+  already there, nothing is merged: the old folder keeps standing for the list and the clash is listed under `problems`.
+- A folder renamed in the vault renames its list in Google, when the folder of a list is gone and that list's notes
+  (by `tasklist_id`) are all in one new folder. The tasks keep their ids, and the archive mirror is renamed too.
+- Nothing deletes a list or a folder. A folder removed in the vault is created again, empty, while its list exists; a list
+  deleted in Google leaves its folder, which then gets a new list.
+- Changes coming from the vault wait for a cycle in which every task note could be read.
+
+Which folder stands for which list is remembered in `sync-state.json` (`tasklistFolders`), so a rename on one side is not
+mistaken for a new list on the other.
 
 File names:
 
@@ -128,7 +146,7 @@ and it has no unpushed edit.
 ## Behaviour worth knowing
 
 - Moving a task note to another list's folder deletes the task in the old list and creates it in the new one, with a new
-  Google id. A folder for a list that does not exist yet creates that list.
+  Google id.
 - Google Tasks only knows `needsAction` and `completed`. A task note marked `cancelled` keeps that state in the vault only.
 - Google is polled; there are no push notifications, so a change made in Google appears after at most one poll interval.
 - The sync's path check is lexical: it keeps every path inside the vault but, unlike the MCP server's guard, does not

@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { createLogger } from '../logger.js';
-import { StateManager } from '../sync/state.js';
+import { emptyState, StateManager } from '../sync/state.js';
 
 const quiet = createLogger({ level: 'silent' });
 
@@ -24,7 +24,7 @@ async function withDataDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 test('a first run starts from an empty state', async () => {
   await withDataDir(async () => {
     const state = await new StateManager().load();
-    assert.deepEqual(state, { calendarTokens: {}, tasksTokens: {}, knownTaskIds: {}, knownEventIds: {} });
+    assert.deepEqual(state, emptyState());
   });
 });
 
@@ -36,6 +36,7 @@ test('saved state loads back unchanged and leaves no temporary file', async () =
       tasksTokens: { '@default': '2026-09-01T00:00:00.000Z' },
       knownTaskIds: { '@default': ['a', 'b'] },
       knownEventIds: { primary: ['e1'] },
+      tasklistFolders: { L2: 'Shopping' },
     };
     await manager.save(state);
     assert.deepEqual(await manager.load(), state);
@@ -81,8 +82,6 @@ test('a state that cannot be saved is an error, not a silent loss of progress', 
   await withDataDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'blocker'), 'a file where a folder is needed');
     const manager = new StateManager(quiet, path.join(dir, 'blocker', 'inside'));
-    await assert.rejects(() =>
-      manager.save({ calendarTokens: {}, tasksTokens: {}, knownTaskIds: {}, knownEventIds: {} }),
-    );
+    await assert.rejects(() => manager.save(emptyState()));
   });
 });

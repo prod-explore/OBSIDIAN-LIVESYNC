@@ -16,10 +16,16 @@ export interface SyncState {
   knownTaskIds: Record<string, string[]>;
   /** Calendar id → the google_ids that have a note; the same for events. */
   knownEventIds: Record<string, string[]>;
+  /**
+   * Task list id → the name of its folder under {Tasks}/ as of the last cycle (every list but the default one, whose
+   * tasks live in {Tasks}/ itself). Comparing it with Google's title and with the folders on disk is how a rename on
+   * either side is told apart from a new list or a new folder (see sync/tasklists.ts).
+   */
+  tasklistFolders: Record<string, string>;
 }
 
 export function emptyState(): SyncState {
-  return { calendarTokens: {}, tasksTokens: {}, knownTaskIds: {}, knownEventIds: {} };
+  return { calendarTokens: {}, tasksTokens: {}, knownTaskIds: {}, knownEventIds: {}, tasklistFolders: {} };
 }
 
 /** Where the sync keeps what it must remember between runs (sync-state.json, status.json). */
@@ -71,6 +77,7 @@ export class StateManager {
       tasksTokens: raw.tasksTokens ?? {},
       knownTaskIds: raw.knownTaskIds ?? {},
       knownEventIds: raw.knownEventIds ?? {},
+      tasklistFolders: raw.tasklistFolders ?? {},
     };
   }
 

@@ -12,8 +12,8 @@ import { saveNote, type PushOutcome } from './shared.js';
 export interface NoteKind<N extends NoteFields> {
   noun: 'task' | 'event';
   scan(ctx: SyncContext): Promise<Scan<N>>;
-  /** The Google task list or calendar a note belongs to. */
-  containerOf(ctx: SyncContext, note: N): string;
+  /** The Google task list or calendar a note belongs to; undefined when that cannot be told this cycle. */
+  containerOf(ctx: SyncContext, entry: ScannedNote<N>): Promise<string | undefined>;
   /** The ids known per list or calendar, for noticing which notes were deleted. */
   manifest(state: SyncState): Record<string, string[]>;
   /** An existing item whose note was moved to another list in the vault. */
@@ -31,6 +31,8 @@ export async function pushKind<N extends NoteFields>(ctx: SyncContext, kind: Not
   // container → the ids that have a note right now. Built as the walk goes, so a deletion is judged against what
   // was in the vault before this pass changed anything.
   const present = new Map<string, Set<string>>();
+  // A note whose list or calendar cannot be told cannot be counted as present, so no deletion may run this cycle.
+  let complete = scan.complete;
   const markPresent = (containerId: string, id: string) => {
     let ids = present.get(containerId);
     if (!ids) present.set(containerId, (ids = new Set()));
@@ -39,7 +41,11 @@ export async function pushKind<N extends NoteFields>(ctx: SyncContext, kind: Not
 
   for (const entry of notes) {
     const { note } = entry;
-    if (note.google_id) markPresent(kind.containerOf(ctx, note), note.google_id);
+    if (note.google_id) {
+      const containerId = await kind.containerOf(ctx, entry);
+      if (containerId) markPresent(containerId, note.google_id);
+      else complete = false;
+    }
 
     if (entry.problems.length > 0) {
       ctx.flag(entry.relative, entry.problems.join('; '));
@@ -79,7 +85,7 @@ export async function pushKind<N extends NoteFields>(ctx: SyncContext, kind: Not
     if (outcome) markPresent(outcome.containerId, outcome.googleId);
   }
 
-  if (!scan.complete) {
+  if (!complete) {
     // Some of the vault could not be read, so a missing note may just be one that was not looked at.
     ctx.log.warn(`Skipping deletions of ${kind.noun}s on Google: the vault was not fully readable this cycle`);
     return;

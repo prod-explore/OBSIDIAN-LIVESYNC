@@ -10,7 +10,6 @@ export interface Config {
   clientSecret: string;
   refreshToken: string;
   calendarIds: string[];
-  tasklistIds: string[];
   pollIntervalMinutes: number;
   /** Lets push delete most of a list on Google in one cycle (see sync/safety.ts). Off unless ALLOW_MASS_DELETE=true. */
   allowMassDelete: boolean;
@@ -36,13 +35,8 @@ export function loadConfig(): Config {
   if (!refreshToken) throw new Error('GOOGLE_REFRESH_TOKEN environment variable is required');
 
   const calendarIdsRaw = process.env.CALENDAR_IDS || 'primary';
-  const tasklistIdsRaw = process.env.TASKLIST_IDS || '@default';
 
   const calendarIds = calendarIdsRaw
-    .split(',')
-    .map((id) => id.trim())
-    .filter(Boolean);
-  const tasklistIds = tasklistIdsRaw
     .split(',')
     .map((id) => id.trim())
     .filter(Boolean);
@@ -66,7 +60,6 @@ export function loadConfig(): Config {
     clientSecret,
     refreshToken,
     calendarIds,
-    tasklistIds,
     pollIntervalMinutes,
     allowMassDelete: process.env.ALLOW_MASS_DELETE === 'true',
     cancelledRetentionDays,

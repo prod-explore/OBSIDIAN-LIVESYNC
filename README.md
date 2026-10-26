@@ -226,6 +226,8 @@ Reporting a vulnerability and what is in scope: [SECURITY.md](SECURITY.md).
 - **Polling, not push.** Google changes reach the vault after at most one poll interval (1 to 59 minutes, default 5).
 - **Fixed layout.** The sync's folders (`{Tasks}`, `{Calendar}`, `04-Archive`, `_Systems`) cannot be renamed.
 - **Moving a task between lists** deletes it in the old list and re-creates it in the new one, with a new Google id.
+- **Lists are never deleted** by the sync, from either side; a folder or list removed on one side comes back on the next
+  cycle.
 - **Headless Obsidian is not pinned** (`latest`), and needs its GUI once per new vault.
 - **No built-in backup.** What to back up is listed in [docs/operations.md](docs/operations.md#what-lives-where).
 

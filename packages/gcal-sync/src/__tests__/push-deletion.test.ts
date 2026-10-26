@@ -29,6 +29,7 @@ function setup(taskIds: string[], overrides: Partial<Config> = {}) {
     tasksTokens: {},
     knownTaskIds: { '@default': [...taskIds] },
     knownEventIds: {},
+    tasklistFolders: {},
   };
   return { deleted, tasks, calendar, state, overrides };
 }
@@ -42,7 +43,6 @@ async function emptyVault(): Promise<Config> {
     clientSecret: 'x',
     refreshToken: 'x',
     calendarIds: ['primary'],
-    tasklistIds: ['@default'],
     pollIntervalMinutes: 5,
     allowMassDelete: false,
     cancelledRetentionDays: 30,

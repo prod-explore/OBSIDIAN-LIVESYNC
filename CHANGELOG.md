@@ -21,6 +21,7 @@ All notable changes. Format after [Keep a Changelog](https://keepachangelog.com/
 - MCP: a base64 `MCP_API_KEY` sent unencoded as `?token=` was refused with 403, because the query string reads `+` as a space. A space in a query token is now also tried as `+`. `.env.example` and the docs recommend `openssl rand -hex 32`.
 
 ### Changed
+- Sync: task lists and the subfolders of `{Tasks}/` are kept in step in both directions: a new list gets a folder and a new folder a list, even when empty, and a rename on either side is carried to the other. Nothing deletes a list or a folder. `TASKLIST_IDS` is gone; it filtered nothing, and its only use was a fallback that could count a note without `tasklist_id` under the wrong list and delete its task.
 - Sync: `_Systems/sync-conflicts.md` records the whole front matter of the edit that lost, not only its title and time.
 - MCP: a malformed or oversized request body is answered with JSON and one structured log line instead of Express's stack trace.
 - MCP: clients see the package version in `serverInfo` (it said 1.1.0); a port that cannot be bound is logged and ends the process cleanly.

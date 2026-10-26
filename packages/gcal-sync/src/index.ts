@@ -34,7 +34,6 @@ function bootstrap(): void {
   log.info('Configuration', {
     vault: config.vaultResolved,
     calendars: config.calendarIds,
-    tasklists: config.tasklistIds,
     pollIntervalMinutes: config.pollIntervalMinutes,
     cancelledRetentionDays: config.cancelledRetentionDays,
   });

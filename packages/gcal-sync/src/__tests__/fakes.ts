@@ -30,7 +30,6 @@ export async function makeVault(overrides: Partial<Config> = {}): Promise<Config
     clientSecret: 'x',
     refreshToken: 'x',
     calendarIds: ['primary'],
-    tasklistIds: ['@default'],
     pollIntervalMinutes: 5,
     allowMassDelete: false,
     cancelledRetentionDays: 30,
@@ -187,18 +186,23 @@ export interface TaskListSpec {
 }
 
 export function fakeTasks(
-  opts: { lists?: TaskListSpec[]; defaultId?: string; listApi?: Handlers<'list' | 'get' | 'insert'> } = {},
+  opts: { lists?: TaskListSpec[]; defaultId?: string; listApi?: Handlers<'list' | 'get' | 'insert' | 'patch'> } = {},
   handlers: Handlers<'list' | 'insert' | 'patch' | 'delete'> = {},
 ) {
   const lists = opts.lists ?? [{ id: 'L1', title: 'My Tasks' }];
   const defaultId = opts.defaultId ?? lists[0]?.id;
   const listApi = recorder(
-    ['list', 'get', 'insert'] as const,
+    ['list', 'get', 'insert', 'patch'] as const,
     {
       insert: (p) => {
         const created = { id: nextId('list'), title: String(p.requestBody?.title) };
         lists.push(created);
         return { data: created };
+      },
+      patch: (p) => {
+        const list = lists.find((l) => l.id === p.tasklist);
+        if (list) list.title = String(p.requestBody.title);
+        return { data: list };
       },
       ...opts.listApi,
     },
@@ -206,6 +210,7 @@ export function fakeTasks(
       list: () => ({ data: { items: lists } }),
       get: () => ({ data: { id: defaultId } }),
       insert: () => ({ data: {} }),
+      patch: () => ({ data: {} }),
     },
   );
   const taskApi = recorder(['list', 'insert', 'patch', 'delete'] as const, handlers, {

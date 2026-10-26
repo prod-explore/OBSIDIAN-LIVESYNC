@@ -10,14 +10,15 @@ import { isArchivedPath, listNameOfFolder, toActive, toArchive } from '../folder
 import { computeSyncHash } from '../hash.js';
 import type { ScannedNote } from '../scan.js';
 import { scanTasks } from '../scan.js';
-import { resolveTasklistId } from '../tasklists.js';
+import { findTasklistId, resolveTasklistId } from '../tasklists.js';
 import type { NoteKind } from './folder.js';
 import { fallbackTitle, insertWithMarker, saveNote, type PushOutcome } from './shared.js';
 
 export const taskKind: NoteKind<TaskNote> = {
   noun: 'task',
   scan: scanTasks,
-  containerOf: (ctx, note) => note.tasklist_id || ctx.config.tasklistIds[0],
+  // A note without tasklist_id (written by hand) belongs to the list of its folder.
+  containerOf: async (ctx, entry) => entry.note.tasklist_id || findTasklistId(ctx, listNameOfFolder(entry.relFolder)),
   manifest: (state) => state.knownTaskIds,
   async hasMoved(ctx, entry) {
     const target = await resolveTasklistId(ctx, listNameOfFolder(entry.relFolder));
