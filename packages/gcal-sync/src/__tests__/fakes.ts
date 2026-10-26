@@ -186,13 +186,17 @@ export interface TaskListSpec {
 }
 
 export function fakeTasks(
-  opts: { lists?: TaskListSpec[]; defaultId?: string; listApi?: Handlers<'list' | 'get' | 'insert' | 'patch'> } = {},
+  opts: {
+    lists?: TaskListSpec[];
+    defaultId?: string;
+    listApi?: Handlers<'list' | 'get' | 'insert' | 'patch' | 'delete'>;
+  } = {},
   handlers: Handlers<'list' | 'insert' | 'patch' | 'delete'> = {},
 ) {
   const lists = opts.lists ?? [{ id: 'L1', title: 'My Tasks' }];
   const defaultId = opts.defaultId ?? lists[0]?.id;
   const listApi = recorder(
-    ['list', 'get', 'insert', 'patch'] as const,
+    ['list', 'get', 'insert', 'patch', 'delete'] as const,
     {
       insert: (p) => {
         const created = { id: nextId('list'), title: String(p.requestBody?.title) };
@@ -204,6 +208,11 @@ export function fakeTasks(
         if (list) list.title = String(p.requestBody.title);
         return { data: list };
       },
+      delete: (p) => {
+        const at = lists.findIndex((l) => l.id === p.tasklist);
+        if (at >= 0) lists.splice(at, 1);
+        return { data: {} };
+      },
       ...opts.listApi,
     },
     {
@@ -211,6 +220,7 @@ export function fakeTasks(
       get: () => ({ data: { id: defaultId } }),
       insert: () => ({ data: {} }),
       patch: () => ({ data: {} }),
+      delete: () => ({ data: {} }),
     },
   );
   const taskApi = recorder(['list', 'insert', 'patch', 'delete'] as const, handlers, {

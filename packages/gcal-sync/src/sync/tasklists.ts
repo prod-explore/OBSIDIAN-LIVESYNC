@@ -1,15 +1,15 @@
 /**
  * Task lists and their folders: the default list is {Tasks}/ itself, every other list is one subfolder of it, named
- * after the list. The mapping is kept in both directions, like the notes: a list made in Google gets a folder, a
- * folder made in the vault gets a list, and a rename on either side is carried over. Nothing here ever deletes a
- * list or a folder.
+ * after the list. The mapping is kept in both directions, like the notes: a list made, renamed or deleted in Google
+ * is made, renamed or trashed in the vault, and the other way round. An empty list or folder is still there and stays.
  */
 import { tasks_v1 } from 'googleapis';
 import * as fs from 'fs/promises';
-import { isFileMissing } from '../errors.js';
+import { isAlreadyGone, isFileMissing } from '../errors.js';
 import { resolveVaultPath, sanitizeTitle } from '../markdown/paths.js';
 import type { SyncContext } from './context.js';
 import { DEFAULT_LIST, isArchivedPath, listNameOfFolder, taskFolder, toArchive } from './folders.js';
+import { isMassDeletion } from './safety.js';
 import { scanTasks } from './scan.js';
 
 export interface TasklistInfo {
@@ -76,14 +76,16 @@ export async function findTasklistId(ctx: SyncContext, listName: string): Promis
 }
 
 /**
- * The Google id of the list a vault folder stands for (see findTasklistId), created when there is none. Returns
- * undefined only when Google cannot be reached.
+ * The Google id of the list a vault folder stands for (see findTasklistId), created when there is none. Undefined
+ * when Google cannot be reached, and for the folder of a list deleted in Google: that folder is on its way to the
+ * trash (see syncTasklistFolders), and making a new list for it would undo the deletion.
  */
 export async function resolveTasklistId(ctx: SyncContext, listName: string): Promise<string | undefined> {
   const info = await getTasklists(ctx);
   if (!info) return undefined;
   const found = await findTasklistId(ctx, listName);
   if (found || listName === DEFAULT_LIST) return found;
+  if (Object.values(ctx.state.tasklistFolders).includes(listName)) return undefined;
   return createList(ctx, info, listName);
 }
 
@@ -101,16 +103,45 @@ async function createList(ctx: SyncContext, info: TasklistInfo, title: string): 
   }
 }
 
-/** The names of the subfolders of a folder; undefined when it cannot be listed (a missing folder has none). */
-async function subfolders(ctx: SyncContext, relFolder: string): Promise<Set<string> | undefined> {
+/**
+ * The names of the subfolders of a folder, and whether the folder is there at all; undefined when it cannot be
+ * listed.
+ */
+async function subfolders(
+  ctx: SyncContext,
+  relFolder: string,
+): Promise<{ names: Set<string>; exists: boolean } | undefined> {
   try {
     const entries = await fs.readdir(resolveVaultPath(ctx.config.vaultResolved, relFolder), { withFileTypes: true });
-    return new Set(entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => e.name));
+    return {
+      names: new Set(entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => e.name)),
+      exists: true,
+    };
   } catch (err) {
-    if (isFileMissing(err)) return new Set();
+    if (isFileMissing(err)) return { names: new Set(), exists: false };
     ctx.fail(`Cannot read ${relFolder}`, err);
     return undefined;
   }
+}
+
+/** The trash folder of the vault; the MCP server's default TRASH_DIR, so everything removed is in one place. */
+export const TRASH_FOLDER = '.trash';
+
+/** Moves a folder into the trash as `<timestamp>__<path with / as __>`, the naming the MCP server uses. */
+async function moveFolderToTrash(ctx: SyncContext, relFolder: string): Promise<string> {
+  const timestamp = ctx.now().toISOString().replace(/[:.]/g, '-');
+  const trashed = `${TRASH_FOLDER}/${timestamp}__${relFolder.replace(/\//g, '__')}`;
+  const vault = ctx.config.vaultResolved;
+  await fs.mkdir(resolveVaultPath(vault, TRASH_FOLDER), { recursive: true });
+  await fs.rename(resolveVaultPath(vault, relFolder), resolveVaultPath(vault, trashed));
+  return trashed;
+}
+
+/** Forgets what the sync knew about a list's tasks, so its deletion is not followed by one deletion per task. */
+function forgetList(ctx: SyncContext, id: string) {
+  delete ctx.state.tasklistFolders[id];
+  delete ctx.state.knownTaskIds[id];
+  delete ctx.state.tasksTokens[id];
 }
 
 /**
@@ -123,29 +154,34 @@ async function subfolders(ctx: SyncContext, relFolder: string): Promise<Set<stri
  *    a number the same way.
  * 2. A list renamed in Google whose folder is gone from the vault too was renamed on both sides. Google's name wins,
  *    the list stays the same list: the folder that now holds its notes is moved to Google's name.
- * 3. A known list whose folder is gone was renamed in the vault if its notes are now all in one folder that stands for
- *    no list: the list is renamed in Google. Without that evidence the folder is created again, empty: the list still
- *    exists, and deleting it is never done automatically.
- * 4. A folder that stands for no list gets a new list.
+ * 3. A list deleted in Google has its folder and archive mirror moved to the vault's trash.
+ * 4. A known list whose folder is gone was renamed in the vault if its notes are now all in one folder that stands for
+ *    no list: the list is renamed in Google. Without that evidence the folder was deleted, and so is the list in
+ *    Google, its archive mirror going to the trash. An empty folder or list is not a deleted one: it stays.
+ * 5. A folder that stands for no list gets a new list.
  *
- * Steps 3 and 4, and step 2 when no folder holds the list's notes, need a full view of the vault and wait for a cycle
- * in which every task note could be read. Returns the lists whose folder is not settled yet: their tasks are not
+ * Steps 3 to 5, and step 2 when no folder holds the list's notes, need a full view of the vault and wait for a cycle
+ * in which every task note could be read; this function only runs once Google's lists were listed. A deletion in the
+ * vault also needs {Tasks}/ itself to be there and is held back, like push's, when most lists vanish at once (an
+ * unmounted volume looks exactly like that) unless ALLOW_MASS_DELETE is set. Returns the lists whose folder is not settled yet: their tasks are not
  * pulled this cycle, so a pulled task cannot bring back a folder that was renamed.
  */
 export async function syncTasklistFolders(ctx: SyncContext): Promise<Set<string>> {
   const unsettled = new Set<string>();
   const info = await getTasklists(ctx);
   if (!info) return unsettled;
-  const active = await subfolders(ctx, taskFolder(DEFAULT_LIST));
-  const archive = await subfolders(ctx, toArchive(taskFolder(DEFAULT_LIST)));
-  if (!active || !archive) return unsettled; // a folder that cannot be listed would look like a deleted one
+  const activeListing = await subfolders(ctx, taskFolder(DEFAULT_LIST));
+  const archiveListing = await subfolders(ctx, toArchive(taskFolder(DEFAULT_LIST)));
+  if (!activeListing || !archiveListing) return unsettled; // a folder that cannot be listed would look like a deleted one
+  const active = activeListing.names;
+  const archive = archiveListing.names;
 
   const recorded = ctx.state.tasklistFolders;
   const lists = info.lists.filter((l): l is tasks_v1.Schema$TaskList & { id: string } =>
     Boolean(l.id && l.id !== info.defaultId),
   );
-  // Lists deleted in Google are forgotten; their folders stay, and step 4 gives them a list again.
-  for (const id of Object.keys(recorded)) if (!lists.some((l) => l.id === id)) delete recorded[id];
+  // Lists deleted in Google; they stay recorded until their folders are in the trash (step 3).
+  const goneInGoogle = Object.entries(recorded).filter(([id]) => !lists.some((l) => l.id === id));
 
   const makeFolder = async (name: string) => {
     if (active.has(name)) return;
@@ -184,7 +220,7 @@ export async function syncTasklistFolders(ctx: SyncContext): Promise<Set<string>
 
   const known = new Set([...Object.values(recorded), ...info.lists.map(titleAsFolder)]);
   const unknown = [...active].filter((name) => !known.has(name));
-  if (missing.length === 0 && renamedBoth.length === 0 && unknown.length === 0) return unsettled;
+  if (missing.length + renamedBoth.length + unknown.length + goneInGoogle.length === 0) return unsettled;
 
   const scan = await scanTasks(ctx);
   /** The active folders that hold notes of a list and stand for no other list. */
@@ -229,7 +265,24 @@ export async function syncTasklistFolders(ctx: SyncContext): Promise<Set<string>
     return unsettled;
   }
 
-  // 3. Vault → Google: a renamed folder
+  // 3. Google → vault: a deleted list
+  for (const [id, folder] of goneInGoogle) {
+    try {
+      for (const rel of [taskFolder(folder), toArchive(taskFolder(folder))]) {
+        const names = rel === taskFolder(folder) ? active : archive;
+        if (!names.has(folder)) continue;
+        const trashed = await moveFolderToTrash(ctx, rel);
+        names.delete(folder);
+        ctx.log.info('Moved the folder of a list deleted in Google to the trash', { folder: rel, trashed });
+      }
+      forgetList(ctx, id);
+    } catch (err) {
+      ctx.fail(`Could not move the folder of the deleted list "${folder}" to the trash`, err);
+    }
+  }
+
+  // 4. Vault → Google: a renamed or deleted folder
+  const deletedInVault: { id: string; folder: string }[] = [];
   for (const { id, folder } of missing) {
     const homes = homesOf(id);
     const [renamedTo] = homes;
@@ -258,13 +311,64 @@ export async function syncTasklistFolders(ctx: SyncContext): Promise<Set<string>
       forget(renamedTo);
       ctx.log.info('Renamed a list in Google after its folder was renamed', { from: folder, to: renamedTo });
     } else {
-      await makeFolder(folder);
+      deletedInVault.push({ id, folder });
     }
   }
+  await deleteLists(ctx, deletedInVault, activeListing.exists, archive, unsettled);
 
-  // 4. Vault → Google: a new folder
+  // 5. Vault → Google: a new folder
   for (const name of unknown) await createList(ctx, info, name);
   return unsettled;
+}
+
+/** Deletes in Google the lists whose folders were deleted in the vault, unless that looks like a fault. */
+async function deleteLists(
+  ctx: SyncContext,
+  deleted: { id: string; folder: string }[],
+  tasksFolderExists: boolean,
+  archive: Set<string>,
+  unsettled: Set<string>,
+): Promise<void> {
+  if (deleted.length === 0) return;
+  const known = Object.keys(ctx.state.tasklistFolders).length;
+  const reason = !tasksFolderExists
+    ? `${taskFolder(DEFAULT_LIST)} itself is missing`
+    : !ctx.config.allowMassDelete && isMassDeletion(deleted.length, known)
+      ? `${deleted.length} of ${known} list folders vanished at once`
+      : undefined;
+  if (reason) {
+    // Not recreated either: the folders' absence is kept as the open question it is, and asked again next cycle.
+    ctx.fail(
+      `Refusing to delete ${deleted.length} task list(s) in Google: ${reason}, which looks like a missing mount rather ` +
+        'than a decision. If the deletion is intended, run once with ALLOW_MASS_DELETE=true.',
+    );
+    for (const { id } of deleted) unsettled.add(id);
+    return;
+  }
+
+  for (const { id, folder } of deleted) {
+    try {
+      await ctx.tasks.tasklists.delete({ tasklist: id });
+    } catch (err) {
+      if (!isAlreadyGone(err)) {
+        ctx.fail(`Could not delete the list "${folder}" in Google`, err);
+        unsettled.add(id);
+        continue;
+      }
+    }
+    ctx.log.info('Deleted a list in Google (its folder was deleted in the vault)', { list: folder });
+    const archived = toArchive(taskFolder(folder));
+    if (archive.has(folder)) {
+      try {
+        ctx.log.info('Moved the archive folder of the deleted list to the trash', {
+          trashed: await moveFolderToTrash(ctx, archived),
+        });
+      } catch (err) {
+        ctx.fail(`Could not move ${archived} to the trash`, err);
+      }
+    }
+    forgetList(ctx, id);
+  }
 }
 
 /** Is `folder` the folder of a list titled `title`: the title itself, or the title with a " (n)" suffix? */

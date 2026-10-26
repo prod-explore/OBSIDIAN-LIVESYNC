@@ -17,6 +17,7 @@ import {
   removeVaults,
   writeNote,
   type TaskListSpec,
+  apiError,
 } from './fakes.js';
 
 after(removeVaults);
@@ -134,7 +135,8 @@ test('a folder renamed in the vault renames the list in Google, keeping its task
   assert.equal(lists[1].title, 'Groceries');
 });
 
-test('a folder removed in the vault comes back empty, and a list removed in Google keeps its folder', async () => {
+/** Two lists with a note each (one of them archived), as a finished cycle leaves them. */
+async function twoLists() {
   const config = await makeVault();
   const state = emptyState();
   const lists = [
@@ -143,19 +145,110 @@ test('a folder removed in the vault comes back empty, and a list removed in Goog
     { id: 'L3', title: 'Garden' },
   ];
   await cycle(config, state, lists);
-  await writeNote(config, '{Tasks}/Garden/Seeds.md', taskNote('Seeds', 'g9', 'L3'));
+  await writeNote(config, '{Tasks}/Shopping/Milk.md', taskNote('Milk', 'g1', 'L2'));
+  await writeNote(config, '04-Archive/{Tasks}/Shopping/Bread.md', {
+    ...taskNote('Bread', 'g2', 'L2'),
+    status: 'completed',
+  });
+  await writeNote(config, '{Tasks}/Garden/Seeds.md', taskNote('Seeds', 'g3', 'L3'));
+  state.knownTaskIds.L2 = ['g1', 'g2'];
+  state.knownTaskIds.L3 = ['g3'];
+  return { config, state, lists };
+}
 
-  await fs.rm(path.join(config.vaultResolved, '{Tasks}/Shopping'), { recursive: true });
-  lists.splice(2, 1); // Garden deleted in Google
-  const tasks = await cycle(config, state, lists);
-
-  assert.equal(await exists(config, '{Tasks}/Shopping'), true, 'the list still exists, so does its folder');
-  assert.equal(await exists(config, '{Tasks}/Garden/Seeds.md'), true, 'nothing in the vault is deleted');
-  assert.deepEqual(
-    tasks.calls.lists.insert.map((c) => c.requestBody?.title),
-    ['Garden'],
-    'a folder with no list gets one again',
+const trashed = async (config: Config) =>
+  (await fs.readdir(path.join(config.vaultResolved, '.trash')).catch(() => [] as string[])).map((f) =>
+    f.replace(/^[^_]+__/, ''),
   );
+
+test('a folder deleted in the vault deletes its list in Google; its archive folder goes to the trash', async () => {
+  const { config, state, lists } = await twoLists();
+  await fs.rm(path.join(config.vaultResolved, '{Tasks}/Shopping'), { recursive: true });
+
+  const tasks = await cycle(config, state, lists);
+  assert.deepEqual(tasks.calls.lists.delete, [{ tasklist: 'L2' }]);
+  assert.deepEqual(
+    lists.map((l) => l.id),
+    ['L1', 'L3'],
+  );
+  assert.equal(tasks.calls.tasks.delete.length, 0, 'the tasks went with the list, not one by one');
+  assert.deepEqual(await trashed(config), ['04-Archive__{Tasks}__Shopping']);
+  assert.equal(await exists(config, '{Tasks}/Shopping'), false, 'not brought back');
+  assert.equal(state.tasklistFolders.L2, undefined);
+  assert.equal(state.knownTaskIds.L2, undefined);
+  assert.equal(await exists(config, '{Tasks}/Garden/Seeds.md'), true);
+});
+
+test('a list deleted in Google moves its folder and archive folder, notes and all, to the trash', async () => {
+  const { config, state, lists } = await twoLists();
+  lists.splice(1, 1); // Shopping deleted in Google
+
+  const tasks = await cycle(config, state, lists);
+  assert.deepEqual((await trashed(config)).sort(), ['04-Archive__{Tasks}__Shopping', '{Tasks}__Shopping']);
+  const kept = (await fs.readdir(path.join(config.vaultResolved, '.trash'))).find((f) =>
+    /^[^_]+__\{Tasks\}__Shopping$/.test(f),
+  );
+  assert.deepEqual(await fs.readdir(path.join(config.vaultResolved, '.trash', kept!)), ['Milk.md']);
+  assert.equal(tasks.calls.lists.insert.length, 0, 'the deleted list is not made again');
+  assert.equal(tasks.calls.tasks.delete.length + tasks.calls.tasks.insert.length, 0);
+  assert.equal(state.tasklistFolders.L2, undefined);
+  assert.equal(state.knownTaskIds.L2, undefined);
+});
+
+test('an emptied folder and an empty list both stay, empty', async () => {
+  const { config, state, lists } = await twoLists();
+  await fs.rm(path.join(config.vaultResolved, '{Tasks}/Garden/Seeds.md')); // folder emptied in the vault
+  state.knownTaskIds.L3 = []; // and the list empty in Google
+
+  const tasks = await cycle(config, state, lists);
+  assert.equal(tasks.calls.lists.delete.length, 0);
+  assert.equal(await exists(config, '{Tasks}/Garden'), true);
+  assert.equal(lists.length, 3);
+  assert.deepEqual(await trashed(config), []);
+});
+
+test('nothing is deleted on either side while the vault is not fully readable', async () => {
+  const { config, state, lists } = await twoLists();
+  await fs.rm(path.join(config.vaultResolved, '{Tasks}/Garden'), { recursive: true });
+  lists.splice(1, 1); // Shopping deleted in Google
+  await fs.writeFile(path.join(config.vaultResolved, '{Tasks}/Broken.md'), '---\ntitle: [unclosed\n---\n');
+
+  const tasks = await cycle(config, state, lists);
+  assert.equal(tasks.calls.lists.delete.length, 0);
+  assert.equal(tasks.calls.lists.insert.length, 0, 'the folder of the deleted list does not get a new list');
+  assert.equal(await exists(config, '{Tasks}/Shopping/Milk.md'), true);
+  assert.deepEqual(await trashed(config), []);
+  assert.equal(state.tasklistFolders.L2, 'Shopping', 'remembered, so the deletion is carried out once it is safe');
+});
+
+test('nothing is deleted when Google cannot list the task lists', async () => {
+  const { config, state } = await twoLists();
+  await fs.rm(path.join(config.vaultResolved, '{Tasks}/Garden'), { recursive: true });
+  const tasks = fakeTasks({
+    listApi: {
+      list: () => {
+        throw apiError(503);
+      },
+    },
+  });
+  await ingest(config, state, fakeCalendar().client, tasks.client);
+  await push(config, state, fakeCalendar().client, tasks.client);
+  assert.equal(tasks.calls.lists.delete.length, 0);
+  assert.equal(await exists(config, '{Tasks}/Shopping/Milk.md'), true);
+  assert.deepEqual(await trashed(config), []);
+  assert.equal(state.tasklistFolders.L3, 'Garden');
+});
+
+test('no list is deleted when {Tasks}/ itself is missing (an unmounted vault)', async () => {
+  const { config, state, lists } = await twoLists();
+  await fs.rm(path.join(config.vaultResolved, '{Tasks}'), { recursive: true });
+
+  const tasks = google(lists);
+  const ctx = await ingest(config, state, fakeCalendar().client, tasks.client);
+  assert.equal(tasks.calls.lists.delete.length, 0);
+  assert.match(ctx.report.firstError ?? '', /Refusing to delete 2 task list\(s\).*\{Tasks\} itself is missing/);
+  assert.equal(await exists(config, '{Tasks}/Shopping'), false, 'not recreated either');
+  assert.equal(state.tasklistFolders.L2, 'Shopping');
 });
 
 test('nothing is created or renamed from the vault while part of it cannot be read', async () => {

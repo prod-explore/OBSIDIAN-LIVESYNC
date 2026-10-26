@@ -40,8 +40,17 @@ first level). At the start of each cycle, before any task is pulled:
   are not pulled that cycle.
 - A folder under `04-Archive/{Tasks}/` never creates a list: archived means archived. A note in it is pushed to the list
   its folder name stands for; when there is none, the note stays as it is and is listed under `problems`.
-- Nothing deletes a list or a folder. A folder removed in the vault is created again, empty, while its list exists; a list
-  deleted in Google leaves its folder, which then gets a new list.
+- Deletions carry across both ways. A folder deleted in the vault deletes its list in Google (with its tasks), and the
+  folder's archive mirror goes to `.trash/`. A list deleted in Google moves its folder and archive mirror, notes and all,
+  to `.trash/` (named `<timestamp>__<path with / as __>`, as the MCP server's `delete_note` does); nothing in the vault is
+  removed for good. Emptiness is not deletion: an empty folder or an empty list stays, empty, on both sides.
+- A deletion only carries across when the sync is sure: the list is in its recorded mapping, Google's task lists were
+  listed this cycle, and every task note could be read. A folder deleted in the vault also needs `{Tasks}/` itself to
+  be there, and when more than five list folders and more than half of them vanish at once nothing is deleted and the
+  cycle counts as failed, as with notes; `ALLOW_MASS_DELETE=true` for one cycle lets it through. Until then the
+  deletion waits, the folder is not recreated, and the list's tasks are not pulled.
+- If a list is renamed in Google while its folder was deleted in the vault, the rename wins and the folder is created
+  again under the new name.
 - Changes coming from the vault wait for a cycle in which every task note could be read.
 
 Which folder stands for which list is remembered in `sync-state.json` (`tasklistFolders`), so a rename on one side is not

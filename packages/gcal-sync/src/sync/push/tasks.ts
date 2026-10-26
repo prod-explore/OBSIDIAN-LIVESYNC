@@ -57,7 +57,9 @@ async function pushTaskNote(
     if (!(await getTasklists(ctx))) throw new Error(`could not determine the Google task list for "${listName}"`);
     ctx.flag(
       entry.relative,
-      `its archive folder "${listName}" stands for no task list, and archived folders never create one`,
+      isArchivedPath(entry.relFolder)
+        ? `its archive folder "${listName}" stands for no task list, and archived folders never create one`
+        : `the list of its folder "${listName}" was deleted in Google; the folder goes to the trash once the vault is fully readable`,
     );
     return undefined;
   }
