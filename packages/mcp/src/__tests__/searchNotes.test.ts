@@ -17,7 +17,7 @@ async function search(vault: string, query: string): Promise<string> {
         handler = h;
       },
     } as unknown as McpServer,
-    { config: { vaultResolved: vault } as unknown as Config },
+    { config: { vaultResolved: vault, trashDir: '.trash' } as unknown as Config },
   );
   return (await handler!({ query })).content[0].text;
 }

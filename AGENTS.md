@@ -30,9 +30,12 @@ reads, and it will not double-check itself the way a person would.
   user-supplied input. This is the one guard that keeps every tool inside
   the vault; skipping it once defeats the point of having it anywhere. It
   also refuses hidden paths (`.obsidian/`, `.trash/`); `allowHidden` is only
-  for paths from the server's own config, never from a client.
+  for paths from the server's own config, never from a client. Pass
+  `{ trashDir: config.trashDir }` too: the trash folder (TRASH_DIR) is refused
+  whatever it is called, and any walk over the vault (listing, search, link
+  rewrite) skips it, so the copies in it stay restorable.
 - **No destructive operation without a recovery path.** `delete_note` moves
-  to `.trash/` instead of calling `unlink`, on purpose. If you add a tool
+  to the trash folder instead of calling `unlink`, on purpose. If you add a tool
   that removes or overwrites something, it needs the same property —
   either soft-delete, or an explicit `overwrite`/`confirm` flag that
   defaults to `false` (see `move_note`). An agent should have to state

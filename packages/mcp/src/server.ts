@@ -189,9 +189,9 @@ export function createApp(config: Config): { app: express.Express; sseRegistry: 
     handle('GET /mcp/sse', async (req, res) => {
       if (!requireAuth(config, req, res)) return;
 
-      // A client that authenticated with ?token= cannot set a header, and the SDK client posts to the endpoint it is
-      // told here (query string dropped by some clients). Telling it the endpoint with the token keeps those clients
-      // working; the value only travels inside the stream the same token just opened.
+      // A client that authenticated with ?token= cannot send a header, and the legacy SSE client posts to exactly the
+      // endpoint announced here. Announcing the endpoint with the token keeps such clients working; the value only
+      // travels inside the stream the same token just opened.
       const queryToken = req.query.token;
       const endpoint =
         typeof queryToken === 'string' && !req.headers.authorization

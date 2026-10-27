@@ -40,7 +40,7 @@ export function registerEditNote(server: McpServer, ctx: ToolContext): void {
       const limited = tooManyWrites(ctx);
       if (limited) return limited;
       try {
-        const fullPath = resolveVaultPath(config.vaultResolved, notePath);
+        const fullPath = resolveVaultPath(config.vaultResolved, notePath, { trashDir: config.trashDir });
 
         let original: string;
         try {

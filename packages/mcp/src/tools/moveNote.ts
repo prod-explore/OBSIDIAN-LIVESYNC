@@ -34,8 +34,8 @@ export function registerMoveNote(server: McpServer, ctx: ToolContext): void {
       const limited = tooManyWrites(ctx);
       if (limited) return limited;
       try {
-        const fromPath = resolveVaultPath(config.vaultResolved, from);
-        const toPath = resolveVaultPath(config.vaultResolved, to);
+        const fromPath = resolveVaultPath(config.vaultResolved, from, { trashDir: config.trashDir });
+        const toPath = resolveVaultPath(config.vaultResolved, to, { trashDir: config.trashDir });
 
         if (fromPath === toPath) {
           return ok(`Source and destination are identical: ${from}. Nothing to do.`);
@@ -65,7 +65,10 @@ export function registerMoveNote(server: McpServer, ctx: ToolContext): void {
         try {
           // Every note whose links change is copied to the trash first, as edit_note does before it changes a note.
           const backup = (rel: string) => copyToTrash(config.vaultResolved, config.trashDir, rel);
-          links = describeLinkUpdate(await updateBacklinks(config.vaultResolved, from, to, { backup }), from);
+          links = describeLinkUpdate(
+            await updateBacklinks(config.vaultResolved, from, to, { backup, trashDir: config.trashDir }),
+            from,
+          );
         } catch (err) {
           // The note has already moved, so this is not a failed call; the client still has to hear about it.
           logger.warn('Moved a note but could not update the links to it', { from, to, error: errorMessage(err) });

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { isInTrash } from 'obsidian-livesync-shared';
 import { errorCode } from './errors.js';
 
 export class PathTraversalError extends Error {
@@ -12,8 +13,8 @@ export class PathTraversalError extends Error {
 
 /**
  * Hidden files and folders are not part of the notes: `.obsidian/` holds the app's settings, plugin code and the
- * LiveSync plugin's CouchDB credentials, `.trash/` holds what was deleted. An agent that can read the first can leak
- * a password; one that can write it can install a plugin, which is code that headless Obsidian runs.
+ * LiveSync plugin's CouchDB credentials. An agent that can read it can leak a password; one that can write it can
+ * install a plugin, which is code that headless Obsidian runs. The default trash, `.trash/`, is hidden too.
  */
 export class HiddenPathError extends Error {
   constructor(attemptedPath: string) {
@@ -22,9 +23,23 @@ export class HiddenPathError extends Error {
   }
 }
 
+/**
+ * The trash folder (TRASH_DIR, `.trash/` unless set) is not part of the notes either, whatever it is called. It holds
+ * the previous versions of deleted, overwritten and edited notes; they stay restorable only while no tool can change
+ * them, and a visible trash must not turn up in reads, listings or searches as if it held notes.
+ */
+export class TrashPathError extends Error {
+  constructor(attemptedPath: string) {
+    super(`Security Error: the trash folder is not reachable through this server ("${attemptedPath}").`);
+    this.name = 'TrashPathError';
+  }
+}
+
 export interface ResolveOptions {
   /** Only for paths that come from the server's own configuration (the trash folder), never from a client. */
   allowHidden?: boolean;
+  /** The configured trash folder (vault-relative): a path at or inside it, directly or through a link, is refused. */
+  trashDir?: string;
 }
 
 function isInside(root: string, target: string): boolean {
@@ -78,12 +93,42 @@ function assertNoSymlinkEscape(vaultRoot: string, resolved: string, attempted: s
   }
 }
 
+/** The real path of `target`; the part of it that does not exist yet is appended as written. */
+function realPathOf(target: string): string {
+  const rest: string[] = [];
+  let existing = target;
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(existing), ...rest);
+    } catch {
+      const parent = path.dirname(existing);
+      if (parent === existing) return target;
+      rest.unshift(path.basename(existing));
+      existing = parent;
+    }
+  }
+}
+
+/**
+ * Is an absolute path inside the vault the trash folder or inside it? Checked as written and again after following
+ * links, so neither a link into the trash nor a link standing in for the trash (or for a folder above it) is a way
+ * round the check.
+ */
+export function isTrashPath(vaultRoot: string, absolutePath: string, trashDir: string): boolean {
+  if (isInTrash(path.relative(vaultRoot, absolutePath), trashDir)) return true;
+  const rootReal = realPathOf(vaultRoot);
+  const trashReal = path.relative(rootReal, realPathOf(path.join(vaultRoot, trashDir)));
+  const real = path.relative(rootReal, realPathOf(absolutePath));
+  return isInTrash(real, trashDir) || (!trashReal.startsWith('..') && isInTrash(real, trashReal));
+}
+
 /**
  * Resolves a vault-relative path and guarantees the result stays inside vaultRoot,
  * both lexically and after following symbolic links.
  * Throws PathTraversalError for anything that would escape the vault
  * (e.g. "../../etc/passwd", an absolute path like "/etc/passwd", or a link that leads out),
- * and HiddenPathError for a path through a hidden file or folder such as `.obsidian/`.
+ * HiddenPathError for a path through a hidden file or folder such as `.obsidian/`, and TrashPathError for a path in
+ * `options.trashDir`.
  */
 export function resolveVaultPath(vaultRoot: string, relativePath: string, options: ResolveOptions = {}): string {
   const resolved = path.resolve(vaultRoot, relativePath);
@@ -95,6 +140,9 @@ export function resolveVaultPath(vaultRoot: string, relativePath: string, option
     throw new HiddenPathError(relativePath);
   }
   assertNoSymlinkEscape(vaultRoot, resolved, relativePath, allowHidden);
+  if (options.trashDir !== undefined && isTrashPath(vaultRoot, resolved, options.trashDir)) {
+    throw new TrashPathError(relativePath);
+  }
   return resolved;
 }
 

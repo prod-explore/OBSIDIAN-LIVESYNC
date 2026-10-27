@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { isInTrash } from 'obsidian-livesync-shared';
 import { errorMessage } from '../errors.js';
 
 /** What a link rewrite did; paths are vault-relative with forward slashes. */
@@ -33,14 +34,15 @@ function escapeRegExp(string: string) {
  * @param oldRelPath Relative path to the old note (e.g. 'folder/old.md' or 'old.md')
  * @param newRelPath Relative path to the new note (e.g. 'folder/new.md' or 'new.md')
  * @param options.backup Keeps a copy of a note (vault-relative path) before it is rewritten
+ * @param options.trashDir The trash folder: the copies in it are never read or rewritten
  */
 export async function updateBacklinks(
   vaultRoot: string,
   oldRelPath: string,
   newRelPath: string,
-  options: { backup?: (relPath: string) => Promise<unknown> } = {},
+  options: { backup?: (relPath: string) => Promise<unknown>; trashDir?: string } = {},
 ): Promise<BacklinkUpdate> {
-  const files = await getAllMdFiles(vaultRoot);
+  const files = await getAllMdFiles(vaultRoot, vaultRoot, options.trashDir);
 
   const oldName = path.basename(oldRelPath, '.md');
   const newName = path.basename(newRelPath, '.md');
@@ -114,14 +116,21 @@ export async function updateBacklinks(
   return result;
 }
 
-async function getAllMdFiles(dir: string, fileList: string[] = []): Promise<string[]> {
+async function getAllMdFiles(
+  vaultRoot: string,
+  dir: string,
+  trashDir: string | undefined,
+  fileList: string[] = [],
+): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue; // hidden folders (.obsidian, the default .trash) hold no notes to rewrite
 
     const fullPath = path.join(dir, entry.name);
+    // Dirent.isDirectory() is false for a link, so links are not followed and the path as written is the real one.
+    if (trashDir !== undefined && isInTrash(path.relative(vaultRoot, fullPath), trashDir)) continue;
     if (entry.isDirectory()) {
-      await getAllMdFiles(fullPath, fileList);
+      await getAllMdFiles(vaultRoot, fullPath, trashDir, fileList);
     } else if (entry.isFile() && entry.name.endsWith('.md')) {
       fileList.push(fullPath);
     }

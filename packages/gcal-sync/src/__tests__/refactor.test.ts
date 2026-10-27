@@ -7,8 +7,8 @@ import { emptyState, fakeCalendar, fakeTasks, makeVault, removeVaults, syncConte
 
 after(removeVaults);
 
-async function vaultWith(files: Record<string, string>) {
-  const config = await makeVault();
+async function vaultWith(files: Record<string, string>, overrides: Parameters<typeof makeVault>[0] = {}) {
+  const config = await makeVault(overrides);
   for (const [rel, content] of Object.entries(files)) {
     const full = path.join(config.vaultResolved, rel);
     await fs.mkdir(path.dirname(full), { recursive: true });
@@ -38,4 +38,15 @@ test('only whole names are rewritten, and links to other notes are left alone', 
   });
   await renameAndRefactorLinks(ctx, 'Plan.md', 'Roadmap.md');
   assert.equal(await read('Hub.md'), '[[Roadmap]] [[Planning]] [[plan b]] [[Other]]');
+});
+
+test('a rename leaves the copies in a visible trash folder as they were', async () => {
+  const trashed = '[[Plan]] as it was before the delete';
+  const { ctx, read } = await vaultWith(
+    { 'Plan.md': '#', 'Hub.md': '[[Plan]]', '_deleted/2026-01-01__Hub.md': trashed },
+    { trashDir: '_deleted' },
+  );
+  await renameAndRefactorLinks(ctx, 'Plan.md', 'Roadmap.md');
+  assert.equal(await read('Hub.md'), '[[Roadmap]]');
+  assert.equal(await read('_deleted/2026-01-01__Hub.md'), trashed);
 });

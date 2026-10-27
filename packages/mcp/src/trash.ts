@@ -9,7 +9,7 @@ import { resolveVaultPath } from './security.js';
  * Returns the vault-relative path of the trashed file (`<trashDir>/<timestamp>__<flattened path>`).
  */
 export async function moveToTrash(vaultRoot: string, trashDir: string, notePathRelative: string): Promise<string> {
-  const fullPath = resolveVaultPath(vaultRoot, notePathRelative);
+  const fullPath = resolveVaultPath(vaultRoot, notePathRelative, { trashDir });
   const trashRoot = resolveVaultPath(vaultRoot, trashDir, { allowHidden: true });
   const trashPath = path.join(trashRoot, trashedName(notePathRelative));
 
@@ -24,7 +24,7 @@ export async function moveToTrash(vaultRoot: string, trashDir: string, notePathR
  * Returns the vault-relative path of the copy.
  */
 export async function copyToTrash(vaultRoot: string, trashDir: string, notePathRelative: string): Promise<string> {
-  const fullPath = resolveVaultPath(vaultRoot, notePathRelative);
+  const fullPath = resolveVaultPath(vaultRoot, notePathRelative, { trashDir });
   const trashRoot = resolveVaultPath(vaultRoot, trashDir, { allowHidden: true });
   const trashPath = path.join(trashRoot, trashedName(notePathRelative));
 

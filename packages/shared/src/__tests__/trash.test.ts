@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_TRASH_DIR, resolveTrashDir, trashedName } from '../index.js';
+import { DEFAULT_TRASH_DIR, isInTrash, resolveTrashDir, trashedName } from '../index.js';
 
 test('TRASH_DIR unset or blank is .trash', () => {
   assert.equal(DEFAULT_TRASH_DIR, '.trash');
@@ -23,4 +23,22 @@ test('a TRASH_DIR outside the vault, or the vault root itself, is refused with t
 test('trashed names carry a timestamp and the flattened path', () => {
   const at = new Date('2026-10-26T12:34:56.789Z');
   assert.equal(trashedName('Folder/Sub\\Note.md', at), '2026-10-26T12-34-56-789Z__Folder__Sub__Note.md');
+});
+
+test('isInTrash matches the trash folder and what is inside it, in any case and with either separator', () => {
+  for (const rel of [
+    '_deleted',
+    '_deleted/',
+    '_deleted/Note.md',
+    '_Deleted/a/b.md',
+    '_deleted\\Note.md',
+    './_deleted/x',
+  ]) {
+    assert.equal(isInTrash(rel, '_deleted'), true, rel);
+  }
+  for (const rel of ['', '.', '_deleted-old/Note.md', 'Notes/_deleted/x.md', '_deletedNote.md', '../_deleted']) {
+    assert.equal(isInTrash(rel, '_deleted'), false, rel);
+  }
+  assert.equal(isInTrash('_System/deleted/x.md', '_System/deleted'), true);
+  assert.equal(isInTrash('_System/other.md', '_System/deleted'), false);
 });

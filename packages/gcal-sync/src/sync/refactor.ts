@@ -1,12 +1,13 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { isInTrash } from 'obsidian-livesync-shared';
 import { resolveVaultPath } from '../markdown/paths.js';
 import type { SyncContext } from './context.js';
 
 /**
  * Moves a note inside the vault and, when its file name changed, rewrites `[[OldName]]`, `[[OldName|Alias]]` and
  * `[[OldName#Heading]]` in every note to the new name, whatever the case of the name in the link. Equal paths are a
- * no-op; hidden folders are not scanned.
+ * no-op; hidden folders and the trash folder (TRASH_DIR) are not scanned, so the copies in the trash stay as they were.
  */
 export async function renameAndRefactorLinks(
   ctx: SyncContext,
@@ -50,6 +51,8 @@ export async function renameAndRefactorLinks(
       if (entry.name.startsWith('.')) continue;
 
       const fullPath = path.join(dir, entry.name);
+      // Dirent.isDirectory() is false for a link, so links are not followed and the path as written is the real one.
+      if (isInTrash(path.relative(vaultRoot, fullPath), ctx.config.trashDir)) continue;
 
       if (entry.isDirectory()) {
         await walk(fullPath);

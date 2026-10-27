@@ -2,13 +2,13 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { resolveVaultPath } from '../security.js';
+import { isTrashPath, resolveVaultPath } from '../security.js';
 import { errorMessage, isFileMissing } from '../errors.js';
 import { ok, fail, ToolContext } from './types.js';
 
 /**
  * `get_vault_tree`: a depth-limited listing of the vault or of one folder in it. Names only, no content; hidden
- * entries are left out.
+ * entries and the trash folder are left out.
  *
  * The default depth of 1 shows the top-level folders and what is directly inside them: enough for a client to
  * find its way without filling its context with every note. -1 lists everything, which is meant for one folder,
@@ -36,13 +36,14 @@ export function registerVaultTree(server: McpServer, { config }: Pick<ToolContex
     },
     async ({ path: inputPath, depth }) => {
       try {
-        const rootPath = resolveVaultPath(config.vaultResolved, inputPath);
+        const rootPath = resolveVaultPath(config.vaultResolved, inputPath, { trashDir: config.trashDir });
         const stat = await fs.stat(rootPath);
         if (!stat.isDirectory()) {
           return fail(`Path is not a directory: ${inputPath}`);
         }
         const lines: string[] = [inputPath ? `${inputPath}/` : '(vault root)'];
-        await walk(rootPath, lines, depth, 0, '');
+        const isTrash = (fullPath: string) => isTrashPath(config.vaultResolved, fullPath, config.trashDir);
+        await walk(rootPath, lines, depth, 0, '', isTrash);
         return ok(lines.join('\n'));
       } catch (err) {
         if (isFileMissing(err)) return fail(`Path not found: ${inputPath}`);
@@ -62,7 +63,8 @@ export function registerVaultTree(server: McpServer, { config }: Pick<ToolContex
  *   ├── Project B/
  *   └── README.md
  *
- * Hidden entries and symbolic links are left out. Within each level folders come before files.
+ * Hidden entries, symbolic links and whatever `isTrash` accepts are left out. Within each level folders come before
+ * files.
  *
  * @param maxDepth  -1 = unlimited; 0 = direct children only; N = N levels below them.
  * @param curDepth  current recursion depth (starts at 0).
@@ -74,11 +76,12 @@ async function walk(
   maxDepth: number,
   curDepth: number,
   prefix: string,
+  isTrash: (fullPath: string) => boolean,
 ): Promise<void> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
   const visible = entries
-    .filter((e) => !e.name.startsWith('.') && (e.isDirectory() || e.isFile()))
+    .filter((e) => !e.name.startsWith('.') && (e.isDirectory() || e.isFile()) && !isTrash(path.join(dirPath, e.name)))
     .sort((a, b) => {
       const aDir = a.isDirectory() ? 0 : 1;
       const bDir = b.isDirectory() ? 0 : 1;
@@ -95,7 +98,7 @@ async function walk(
     if (entry.isDirectory()) {
       lines.push(`${prefix}${branch}${entry.name}/`);
       if (maxDepth === -1 || curDepth < maxDepth) {
-        await walk(path.join(dirPath, entry.name), lines, maxDepth, curDepth + 1, prefix + childPfx);
+        await walk(path.join(dirPath, entry.name), lines, maxDepth, curDepth + 1, prefix + childPfx, isTrash);
       }
     } else {
       lines.push(`${prefix}${branch}${entry.name}`);

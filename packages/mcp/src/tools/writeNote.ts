@@ -25,7 +25,7 @@ export function registerWriteNote(server: McpServer, ctx: ToolContext): void {
       const limited = tooManyWrites(ctx);
       if (limited) return limited;
       try {
-        const fullPath = resolveVaultPath(config.vaultResolved, notePath);
+        const fullPath = resolveVaultPath(config.vaultResolved, notePath, { trashDir: config.trashDir });
 
         const existing = await fs.stat(fullPath).catch(() => undefined);
         let trashedPath: string | undefined;

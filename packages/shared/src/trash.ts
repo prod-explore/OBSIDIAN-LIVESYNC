@@ -33,6 +33,17 @@ export function resolveTrashDir(value: string | undefined): string {
 }
 
 /**
+ * Is a vault-relative path (either separator) the trash folder `trashDir` (as resolveTrashDir returns it) or inside
+ * it? Case-insensitive: on a case-insensitive file system `_Deleted/x` is the trash too, and refusing a folder whose
+ * name differs from TRASH_DIR in case alone is the cheaper mistake.
+ */
+export function isInTrash(relativePath: string, trashDir: string): boolean {
+  const relative = path.posix.normalize(relativePath.replace(/\\/g, '/')).replace(/\/+$/, '').toLowerCase();
+  const trash = trashDir.toLowerCase();
+  return relative === trash || relative.startsWith(`${trash}/`);
+}
+
+/**
  * The name a note or folder gets in the trash: a timestamp, then its vault-relative path flattened (`Folder/Note.md`
  * -> `Folder__Note.md`), so two things with one name in different folders, or two versions of one, never collide.
  */

@@ -25,7 +25,7 @@ export function registerDeleteNote(server: McpServer, ctx: ToolContext): void {
       const limited = tooManyWrites(ctx);
       if (limited) return limited;
       try {
-        const fullPath = resolveVaultPath(config.vaultResolved, notePath);
+        const fullPath = resolveVaultPath(config.vaultResolved, notePath, { trashDir: config.trashDir });
 
         const stat = await fs.stat(fullPath).catch(() => {
           throw new Error(`Note does not exist: ${notePath}`);

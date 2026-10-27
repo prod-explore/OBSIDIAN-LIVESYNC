@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as fs from 'fs/promises';
-import { resolveVaultPath } from '../security.js';
+import * as path from 'path';
+import { isTrashPath, resolveVaultPath } from '../security.js';
 import { errorMessage, isFileMissing } from '../errors.js';
 import { ok, fail, ToolContext } from './types.js';
 
@@ -11,7 +12,7 @@ import { ok, fail, ToolContext } from './types.js';
  * gets a useful answer.
  *
  *   - a file   → its contents (UTF-8)
- *   - a folder → its immediate children, sorted, marked 📁/📄, hidden entries left out
+ *   - a folder → its immediate children, sorted, marked 📁/📄, hidden entries and the trash folder left out
  */
 export function registerGetPath(server: McpServer, { config }: Pick<ToolContext, 'config'>): void {
   server.tool(
@@ -30,12 +31,16 @@ export function registerGetPath(server: McpServer, { config }: Pick<ToolContext,
     },
     async ({ path: inputPath }) => {
       try {
-        const fullPath = resolveVaultPath(config.vaultResolved, inputPath);
+        const fullPath = resolveVaultPath(config.vaultResolved, inputPath, { trashDir: config.trashDir });
         const stat = await fs.stat(fullPath);
 
         if (stat.isDirectory()) {
           const entries = await fs.readdir(fullPath, { withFileTypes: true });
-          const visible = entries.filter((e) => !e.name.startsWith('.'));
+          const visible = entries.filter(
+            (e) =>
+              !e.name.startsWith('.') &&
+              !isTrashPath(config.vaultResolved, path.join(fullPath, e.name), config.trashDir),
+          );
 
           if (visible.length === 0) {
             return ok(`(empty) ${inputPath || '/'}`);
@@ -63,7 +68,7 @@ export function registerGetPath(server: McpServer, { config }: Pick<ToolContext,
         if (isFileMissing(err)) {
           return fail(`Path not found: ${inputPath}`);
         }
-        // A refused path (PathTraversalError, HiddenPathError) and anything unexpected reach the client as a
+        // A refused path (PathTraversalError, HiddenPathError, TrashPathError) and anything unexpected reach the client as a
         // tool error with its message, not as a silent empty result.
         return fail(`Error accessing path: ${errorMessage(err)}`);
       }

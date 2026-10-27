@@ -2,11 +2,13 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { isInTrash } from 'obsidian-livesync-shared';
 import { errorMessage } from '../errors.js';
 import { ok, fail, ToolContext } from './types.js';
 
 /**
  * Walks the vault for .md files whose name or content contains `query` (already lower-cased), stopping at `limit`.
+ * Hidden entries and the trash folder `trashDir` are left out.
  * There is no index: every search reads the files as they are on disk now, so a result is only as stale as
  * LiveSync's replication into this vault.
  */
@@ -16,6 +18,7 @@ async function walkAndSearch(
   query: string,
   results: string[],
   limit: number,
+  trashDir: string,
 ): Promise<void> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
@@ -23,8 +26,10 @@ async function walkAndSearch(
     if (entry.name.startsWith('.')) continue; // hidden files and folders, the default .trash included
     if (entry.isSymbolicLink()) continue; // never follow links: they may lead out of the vault
     const full = path.resolve(dir, entry.name);
+    // Links are never followed, so the path as written is where the entry really is.
+    if (isInTrash(path.relative(vaultRoot, full), trashDir)) continue;
     if (entry.isDirectory()) {
-      await walkAndSearch(full, vaultRoot, query, results, limit);
+      await walkAndSearch(full, vaultRoot, query, results, limit, trashDir);
     } else if (entry.name.endsWith('.md')) {
       try {
         const content = await fs.readFile(full, 'utf-8');
@@ -58,6 +63,7 @@ export function registerSearchNotes(server: McpServer, { config }: Pick<ToolCont
           query.toLowerCase(),
           results,
           MAX_SEARCH_RESULTS,
+          config.trashDir,
         );
         if (results.length === 0) return ok(`No notes found matching "${query}".`);
         const capped =
