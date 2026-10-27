@@ -18,7 +18,7 @@
     "test:coverage": "npm run build && c8 node --test dist/__tests__/*.test.js"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
+    "@types/node": "^26.6.5",
     "typescript": "^5.4.5"
   },
   "engines": {
