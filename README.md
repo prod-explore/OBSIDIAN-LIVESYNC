@@ -65,18 +65,20 @@ mkdir -p demo-vault/Projects
 printf '# Welcome\n\nSee [[Plan]].\n' > demo-vault/Welcome.md
 printf '# Plan\n\n- ship it\n' > demo-vault/Projects/Plan.md
 
-MCP_API_KEY=demo-key VAULT_PATH=./demo-vault node packages/mcp/dist/index.js
+export MCP_API_KEY=demo-key
+VAULT_PATH=./demo-vault node packages/mcp/dist/index.js
 ```
 
 In a second terminal, from the same directory:
 
 ```bash
-curl -s -H 'Authorization: Bearer demo-key' localhost:3000/mcp/health
+export MCP_API_KEY=demo-key
+curl -s -H "Authorization: Bearer $MCP_API_KEY" localhost:3000/mcp/health
 
 # Call a tool over MCP's streamable HTTP transport and print the text it returns.
 mcp() {
   curl -s localhost:3000/mcp/sse \
-    -H 'Authorization: Bearer demo-key' -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $MCP_API_KEY" -H 'Content-Type: application/json' \
     -H 'Accept: application/json, text/event-stream' \
     -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" |
     sed -n 's/^data: //p' | jq -r '.result.content[0].text'
