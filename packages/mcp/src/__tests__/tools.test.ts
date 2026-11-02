@@ -1,11 +1,11 @@
-// write_note, edit_note, delete_note, move_note, get_path and get_vault_tree against a real (temporary) vault.
+// write_note, edit_note, delete_path, move_note, get_path and get_vault_tree against a real (temporary) vault.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { makeHarness, text, type Harness } from './harness.js';
-import { withWriteFailing } from './failingWrite.js';
+import { withWriteFailing } from './fsFaults.js';
 
 let h: Harness;
 before(async () => {
@@ -54,9 +54,9 @@ test('write_note will not write outside the vault', async () => {
   );
 });
 
-test('delete_note moves the note to the trash instead of removing it', async () => {
+test('delete_path moves the note to the trash instead of removing it', async () => {
   await h.write('delete/Old.md', 'keep me findable');
-  const res = await h.call('delete_note', { path: 'delete/Old.md' });
+  const res = await h.call('delete_path', { path: 'delete/Old.md' });
   assert.equal(res.isError, undefined);
   assert.match(text(res), /Moved to trash: delete\/Old\.md/);
   assert.equal(await h.exists('delete/Old.md'), false);
@@ -65,14 +65,14 @@ test('delete_note moves the note to the trash instead of removing it', async () 
   assert.equal(await h.read(saved), 'keep me findable');
 });
 
-test('delete_note on a note that is not there is an error, not a silent success', async () => {
-  const res = await h.call('delete_note', { path: 'delete/Missing.md' });
+test('delete_path on a note that is not there is an error, not a silent success', async () => {
+  const res = await h.call('delete_path', { path: 'delete/Missing.md' });
   assert.equal(res.isError, true);
   assert.match(text(res), /does not exist/);
 });
 
-test('delete_note will not touch anything outside the vault', async () => {
-  const res = await h.call('delete_note', { path: '../../etc/hostname' });
+test('delete_path will not touch anything outside the vault', async () => {
+  const res = await h.call('delete_path', { path: '../../etc/hostname' });
   assert.equal(res.isError, true);
   assert.match(text(res), /traversal/i);
 });
@@ -209,7 +209,7 @@ test('no tool writes, edits, moves or deletes inside a hidden folder such as .ob
     h.call('write_note', { path: '.obsidian/plugins/evil/main.js', content: 'require("child_process")' }),
     h.call('write_note', { path: '.obsidian/community-plugins.json', content: '["evil"]', overwrite: true }),
     h.call('edit_note', { path: '.obsidian/community-plugins.json', start_line: 1, end_line: 1, new_content: '[]' }),
-    h.call('delete_note', { path: '.obsidian/community-plugins.json' }),
+    h.call('delete_path', { path: '.obsidian/community-plugins.json' }),
     h.call('move_note', { from: 'guard/Note.md', to: '.obsidian/plugins/evil/main.js' }),
     h.call('move_note', { from: '.obsidian/community-plugins.json', to: 'guard/plugins.md' }),
     h.call('write_note', { path: '.trash/planted.md', content: 'x' }),
@@ -240,13 +240,13 @@ test('write_note will not create a note through a symbolic link that leads out, 
   }
 });
 
-test('delete_note, write_note and move_note refuse folders, so nothing is ever removed or moved recursively', async () => {
+test('delete_path refuses a folder with anything in it, write_note and move_note refuse folders: nothing is removed or moved recursively', async () => {
   await h.write('bulk/Project/a.md', 'a');
   await h.write('bulk/Project/b.md', 'b');
   await h.write('bulk/single.md', 'single');
 
   const attempts = {
-    'delete a folder': await h.call('delete_note', { path: 'bulk/Project' }),
+    'delete a folder': await h.call('delete_path', { path: 'bulk/Project' }),
     'overwrite a folder': await h.call('write_note', { path: 'bulk/Project', content: 'x', overwrite: true }),
     'move a folder': await h.call('move_note', { from: 'bulk/Project', to: 'bulk/Moved' }),
     'move onto a folder': await h.call('move_note', { from: 'bulk/single.md', to: 'bulk/Project', overwrite: true }),
@@ -296,7 +296,7 @@ test('writes past the limit are refused with a wait time; reads and the vault ar
       ['write_note', { path: 'c.md', content: '3' }],
       ['edit_note', { path: 'seed.md', start_line: 2, end_line: 2, new_content: 'TWO' }],
       ['move_note', { from: 'b.md', to: 'd.md' }],
-      ['delete_note', { path: 'b.md' }],
+      ['delete_path', { path: 'b.md' }],
     ] as const) {
       const res = await limited.call(tool, args);
       assert.equal(res.isError, true, tool);

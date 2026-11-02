@@ -12,7 +12,7 @@ before(async () => {
   h = await makeHarness({ trashDir: '_deleted' });
   await h.write('Plan.md', 'the plan');
   await h.write('Hub.md', 'see [[Plan]] (zebra-word)');
-  await h.call('delete_note', { path: 'Hub.md' });
+  await h.call('delete_path', { path: 'Hub.md' });
   [copy] = await h.files('_deleted');
 });
 after(() => h.cleanup());
@@ -22,7 +22,7 @@ const refused = (res: ToolResult) => {
   assert.match(text(res), /trash folder is not reachable/);
 };
 
-test('delete_note puts the note in the configured trash folder', () => {
+test('delete_path puts the note in the configured trash folder', () => {
   assert.match(copy, /^_deleted\/[^/]+__Hub\.md$/);
 });
 
@@ -35,7 +35,8 @@ test('no tool reads, writes, edits, deletes or moves anything in the trash folde
     h.call('write_note', { path: '_deleted/planted.md', content: 'x' }),
     h.call('write_note', { path: copy, content: 'x', overwrite: true }),
     h.call('edit_note', { path: copy, start_line: 1, end_line: 1, new_content: 'x' }),
-    h.call('delete_note', { path: copy }),
+    h.call('delete_path', { path: copy }),
+    h.call('delete_path', { path: '_deleted' }),
     h.call('move_note', { from: copy, to: 'Restored.md' }),
     h.call('move_note', { from: 'Plan.md', to: '_deleted/Plan.md' }),
   ];

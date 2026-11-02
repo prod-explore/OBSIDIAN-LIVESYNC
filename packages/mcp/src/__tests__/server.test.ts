@@ -176,7 +176,7 @@ test('an authenticated MCP client can list the tools the README documents', asyn
   const payload = text.split('\n').find((l) => l.startsWith('data:'));
   const message = JSON.parse(payload ? payload.slice(5) : text) as { result: { tools: { name: string }[] } };
   assert.deepEqual(message.result.tools.map((t) => t.name).sort(), [
-    'delete_note',
+    'delete_path',
     'edit_note',
     'get_path',
     'get_vault_tree',

@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { updateBacklinks } from '../tools/refactorLinks.js';
-import { withWriteFailing } from './failingWrite.js';
+import { withWriteFailing } from './fsFaults.js';
 
 async function makeVault(files: Record<string, string>): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'obs-links-'));

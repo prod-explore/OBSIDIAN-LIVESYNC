@@ -6,11 +6,13 @@ All notable changes. Format after [Keep a Changelog](https://keepachangelog.com/
 
 ### Security
 - **MCP: hidden paths are refused.** `resolveVaultPath()` refuses any path through a hidden file or folder, also behind a link. Before, `get_path` could read `.obsidian/plugins/obsidian-livesync/data.json` (the CouchDB password) and `write_note` could plant a plugin that headless Obsidian would run.
-- **MCP: one note at a time.** `delete_note`, `write_note` (with `overwrite`) and `move_note` accepted a folder and trashed or moved it whole; they now refuse folders.
+- **MCP: one note at a time.** `delete_note` (now `delete_path`), `write_note` (with `overwrite`) and `move_note` accepted a folder and trashed or moved it whole; they now refuse folders (`delete_path` removes a folder only while it is empty, see Added).
 - **Logs:** secret-named fields are masked at any depth, `client_secret=`/`refresh_token=` and other secret URL parameters and secret keys quoted in JSON text are masked, and a field that refers to itself no longer makes the logger throw.
 - `get-token` listens on `localhost` only.
 
 ### Added
+- MCP: `delete_path` removes an empty folder. It calls a plain `rmdir`, which refuses a folder with anything in it (hidden files included) atomically, so nothing can be deleted recursively and a note written into the folder at the last moment is never lost; the refusal says how many items the folder holds and which are hidden. The vault root and the sync's folders are refused even when empty: `{Tasks}`, `{Calendar}`, `04-Archive`, its two mirrors and `_Systems`, each task list's folder and its archive mirror (deleting it would delete the list in Google, with tasks the vault may not hold), and the `YYYY-MM` month folders. Folder deletions count against `MCP_WRITE_LIMIT_PER_MINUTE`.
+- Repository: the names of the sync's folders live in `packages/shared`, read by both services.
 - MCP: writes are rate limited (`MCP_WRITE_LIMIT_PER_MINUTE`, 120 by default, `0` = off): a client in a loop can no longer rewrite or trash a vault in seconds.
 - MCP: `MCP_BODY_LIMIT` (5 MB by default). The 100 kB default of Express made `write_note` fail on a larger note.
 - MCP: `edit_note` copies the note to `.trash/` before changing it, and `move_note` copies every note whose links it rewrites.
@@ -21,6 +23,7 @@ All notable changes. Format after [Keep a Changelog](https://keepachangelog.com/
 - MCP: a base64 `MCP_API_KEY` sent unencoded as `?token=` was refused with 403, because the query string reads `+` as a space. A space in a query token is now also tried as `+`. `.env.example` and the docs recommend `openssl rand -hex 32`.
 
 ### Changed
+- **Breaking (MCP): `delete_note` is renamed `delete_path`**, the counterpart of `get_path`, because it now takes a folder too. A note is deleted as before (moved to the trash); clients and saved prompts that call `delete_note` must use the new name.
 - Sync: task lists and the subfolders of `{Tasks}/` are kept in step in both directions: a new list gets a folder and a new folder a list, even when empty, and a rename on either side is carried to the other (when both sides renamed it, the list keeps Google's name and stays the same list, its folder moved to that name); lists whose names make the same folder name get `<name> (2)`, `(3)`. Deleting carries across too: a folder deleted in the vault deletes its list in Google, a list deleted in Google sends its folder to the trash (`TRASH_DIR`, read by both services through the new `packages/shared`, validated: a folder inside the vault); an empty folder or list stays. A deletion waits until the mapping is known, Google's lists were listed and the vault was fully readable, and is refused when `{Tasks}/` is missing or most list folders vanish at once. `TASKLIST_IDS` is gone; it filtered nothing, and its only use was a fallback that could count a note without `tasklist_id` under the wrong list and delete its task.
 - Sync: `_Systems/sync-conflicts.md` records the whole front matter of the edit that lost, not only its title and time.
 - MCP: a malformed or oversized request body is answered with JSON and one structured log line instead of Express's stack trace.

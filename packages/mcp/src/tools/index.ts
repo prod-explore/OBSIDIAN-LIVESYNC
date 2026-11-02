@@ -7,7 +7,7 @@ import { registerWriteNote } from './writeNote.js';
 import { registerEditNote } from './editNote.js';
 import { registerSearchNotes } from './searchNotes.js';
 import { registerMoveNote } from './moveNote.js';
-import { registerDeleteNote } from './deleteNote.js';
+import { registerDeletePath } from './deletePath.js';
 
 /** Registers every tool this server exposes onto a fresh McpServer instance. */
 export function registerAllTools(
@@ -22,5 +22,5 @@ export function registerAllTools(
   registerEditNote(server, ctx);
   registerSearchNotes(server, ctx);
   registerMoveNote(server, ctx);
-  registerDeleteNote(server, ctx);
+  registerDeletePath(server, ctx);
 }
