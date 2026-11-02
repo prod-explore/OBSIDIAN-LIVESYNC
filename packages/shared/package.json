@@ -1,7 +1,7 @@
 {
   "name": "obsidian-livesync-shared",
   "version": "1.0.0",
-  "description": "Settings both services read the same way (the vault's trash folder)",
+  "description": "Settings both services read the same way: the vault's trash folder and the names of the sync's folders",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

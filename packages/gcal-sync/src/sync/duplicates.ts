@@ -5,12 +5,12 @@ import type { NoteFields } from '../markdown/notes.js';
 import { isPastMonth } from './archive.js';
 import { logConflict } from './conflicts.js';
 import type { SyncContext } from './context.js';
-import { isArchivedPath } from './folders.js';
+import { SYSTEMS_FOLDER, isArchivedPath } from './folders.js';
 import { isLocallyModified } from './hash.js';
 import type { ScannedNote } from './scan.js';
 
 /** Where the copy that lost is kept. Nothing in here is read by the sync. */
-export const DUPLICATES_FOLDER = '_Systems/duplicates';
+export const DUPLICATES_FOLDER = `${SYSTEMS_FOLDER}/duplicates`;
 
 type Kind = 'task' | 'event';
 

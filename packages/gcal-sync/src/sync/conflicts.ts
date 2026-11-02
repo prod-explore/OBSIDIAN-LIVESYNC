@@ -2,8 +2,9 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { resolveVaultPath } from '../markdown/paths.js';
 import type { SyncContext } from './context.js';
+import { SYSTEMS_FOLDER } from './folders.js';
 
-const CONFLICT_LOG = '_Systems/sync-conflicts.md';
+const CONFLICT_LOG = `${SYSTEMS_FOLDER}/sync-conflicts.md`;
 
 /** Appends what lost (and why) to the conflict log in the vault, so a decision the sync made for you can be looked at later. */
 export async function logConflict(

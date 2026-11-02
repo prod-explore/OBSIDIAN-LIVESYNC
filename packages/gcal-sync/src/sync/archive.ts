@@ -1,7 +1,5 @@
 import { sanitizeTitle } from '../markdown/paths.js';
-
-/** The folder that mirrors {Tasks} and {Calendar} for finished tasks and past events. */
-export const ARCHIVE_PREFIX = '04-Archive';
+import { ARCHIVE_PREFIX, CALENDAR_FOLDER } from './folders.js';
 
 /**
  * True once the month of `isoDateOrDateTime` is over: a whole-month comparison, not a day count. An event from
@@ -24,6 +22,6 @@ export function isPastMonth(isoDateOrDateTime: string, now: Date = new Date()): 
 export function eventNotePath(startRaw: string, title: string, googleId: string, now: Date = new Date()): string {
   const datePart = startRaw.slice(0, 10) || now.toISOString().slice(0, 10);
   const timePart = startRaw.includes('T') ? startRaw.slice(11, 16).replace(':', '') : '0000';
-  const active = `{Calendar}/${datePart.slice(0, 4)}-${datePart.slice(5, 7)}/${datePart}-${timePart}-${sanitizeTitle(title)}-${googleId.substring(0, 8)}.md`;
+  const active = `${CALENDAR_FOLDER}/${datePart.slice(0, 4)}-${datePart.slice(5, 7)}/${datePart}-${timePart}-${sanitizeTitle(title)}-${googleId.substring(0, 8)}.md`;
   return isPastMonth(datePart, now) ? `${ARCHIVE_PREFIX}/${active}` : active;
 }

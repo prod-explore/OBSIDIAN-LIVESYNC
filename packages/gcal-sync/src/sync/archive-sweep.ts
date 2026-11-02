@@ -1,9 +1,9 @@
 import * as fs from 'fs/promises';
 import { isFileMissing } from '../errors.js';
 import { resolveVaultPath } from '../markdown/paths.js';
-import { ARCHIVE_PREFIX, isPastMonth } from './archive.js';
+import { isPastMonth } from './archive.js';
 import type { SyncContext } from './context.js';
-import { CALENDAR_FOLDER } from './folders.js';
+import { ARCHIVE_PREFIX, CALENDAR_FOLDER } from './folders.js';
 import { renameAndRefactorLinks } from './refactor.js';
 
 /**

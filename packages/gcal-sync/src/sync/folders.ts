@@ -1,8 +1,7 @@
-import { ARCHIVE_PREFIX } from './archive.js';
+import { ARCHIVE_PREFIX, TASKS_FOLDER } from 'obsidian-livesync-shared';
 
-/** The two synced folders. Their names are fixed. */
-export const TASKS_FOLDER = '{Tasks}';
-export const CALENDAR_FOLDER = '{Calendar}';
+/** The vault's fixed layout lives in obsidian-livesync-shared, so the MCP server reads the same names. */
+export { ARCHIVE_PREFIX, CALENDAR_FOLDER, SYSTEMS_FOLDER, TASKS_FOLDER } from 'obsidian-livesync-shared';
 
 /** The name Google Tasks gives its default list; its tasks live directly in {Tasks}/, any other list in a subfolder. */
 export const DEFAULT_LIST = '@default';

@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { resolveTrashDir } from 'obsidian-livesync-shared';
+import { SYNCED_ROOTS, resolveTrashDir } from 'obsidian-livesync-shared';
 
 /** The service's settings, read once from the environment at start-up. */
 export interface Config {
@@ -22,9 +22,6 @@ export interface Config {
   /** TRASH_DIR, the vault's trash folder, read as the MCP server reads it: where a deleted task list's folder goes. */
   trashDir: string;
 }
-
-/** Folders the sync reads notes from; a trash inside one would have its contents synced back. */
-const SYNCED_ROOTS = ['{Tasks}', '{Calendar}', '04-Archive'];
 
 /** Reads and checks the configuration. Throws, naming the variable, when one is missing or out of range. */
 export function loadConfig(): Config {
@@ -60,6 +57,7 @@ export function loadConfig(): Config {
   }
 
   const trashDir = resolveTrashDir(process.env.TRASH_DIR);
+  // A trash inside a folder the sync reads would have its contents synced back.
   if (SYNCED_ROOTS.some((root) => trashDir === root || trashDir.startsWith(`${root}/`))) {
     throw new Error(
       `TRASH_DIR must not be inside a folder the sync reads (${SYNCED_ROOTS.join(', ')}); got "${trashDir}"`,

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isPastMonth, ARCHIVE_PREFIX } from '../sync/archive.js';
+import { isPastMonth } from '../sync/archive.js';
+import { ARCHIVE_PREFIX } from '../sync/folders.js';
 
 const NOW = new Date('2026-09-15T12:00:00Z'); // fixed "today" for all cases below
 

@@ -11,9 +11,8 @@ import {
   type TaskNote,
 } from '../markdown/notes.js';
 import { resolveVaultPath } from '../markdown/paths.js';
-import { ARCHIVE_PREFIX } from './archive.js';
 import type { SyncContext } from './context.js';
-import { CALENDAR_FOLDER, TASKS_FOLDER } from './folders.js';
+import { ARCHIVE_PREFIX, CALENDAR_FOLDER, TASKS_FOLDER } from './folders.js';
 
 /** A note found in the vault, with the file it came from. */
 export interface ScannedNote<N extends NoteFields> {
