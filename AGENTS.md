@@ -34,12 +34,26 @@ reads, and it will not double-check itself the way a person would.
   `{ trashDir: config.trashDir }` too: the trash folder (TRASH_DIR) is refused
   whatever it is called, and any walk over the vault (listing, search, link
   rewrite) skips it, so the copies in it stay restorable.
-- **No destructive operation without a recovery path.** `delete_note` moves
-  to the trash folder instead of calling `unlink`, on purpose. If you add a tool
+- **No destructive operation without a recovery path.** `delete_path` moves
+  a note to the trash folder instead of calling `unlink`, on purpose. If you add a tool
   that removes or overwrites something, it needs the same property —
   either soft-delete, or an explicit `overwrite`/`confirm` flag that
   defaults to `false` (see `move_note`). An agent should have to state
   destructive intent, not stumble into it.
+- **A folder is removed only while it is empty, by the kernel's check.**
+  The trash is not reachable through this server, so a removed folder with
+  anything in it could not be restored. `delete_path` calls a plain
+  `fs.rmdir` (never `fs.rm`, never `recursive`), which refuses atomically
+  with `ENOTEMPTY`; don't list the folder first and delete after (a note
+  written in between would go with it), and don't treat a folder of hidden
+  files as empty. List it only after the refusal, for the message.
+- **The sync's folders stay.** The vault root and every folder for which
+  `syncFolderKind()` (`packages/shared`) returns a kind are refused, as
+  written and after following links: the layout (`{Tasks}`, `{Calendar}`,
+  `04-Archive` and its two mirrors, `_Systems`), each task list's folder and
+  its archive mirror (deleting a list's folder deletes the list in Google,
+  tasks and all), and the `YYYY-MM` month folders. Take folder names from
+  `packages/shared`, never retype them.
 - **No shell/process execution tools.** Nothing in this server should ever
   hand an AI client `exec`, `spawn`, or equivalent. A vault full of
   agent-writable Markdown is a plausible prompt-injection vector; giving
@@ -85,8 +99,8 @@ Already done: rate limiting of the tools that change the vault (`rateLimit.ts`,
 `MCP_WRITE_LIMIT_PER_MINUTE`). A new tool that writes must call `tooManyWrites(ctx)` first.
 
 Deliberately **not** on this list, and shouldn't be added without a real
-conversation about why: shell execution, permanent (non-trash) delete,
-recursive folder delete/move, arbitrary HTTP fetch from within a tool, or
+conversation about why: shell execution, permanent (non-trash) delete of
+anything but an empty folder, recursive folder delete/move, arbitrary HTTP fetch from within a tool, or
 anything that reads `.env`/secrets back to the client.
 
 ## Operations

@@ -40,7 +40,7 @@ make those settings identical on every device and on the headless instance.
 
 ## Recovering notes
 
-- `delete_note`, and `write_note`/`move_note` with `overwrite`, move the old file into `.trash/` (name: timestamp + flattened
+- `delete_path` on a note, and `write_note`/`move_note` with `overwrite`, move the old file into `.trash/` (name: timestamp + flattened
   path). Copy it back out on the host; the folder is hidden from the vault tree, folder listings and search, and no
   tool can read or write it (hidden paths such as `.trash/` and `.obsidian/` are refused).
 - `edit_note` copies the note into `.trash/` before it changes it, and `move_note` copies every note whose links it
@@ -87,7 +87,9 @@ How notes map to events and tasks, and the sync's rules: [google-sync.md](google
 
 - **What a client can reach.** Only files and folders inside the vault whose path has no hidden part: `..`, absolute paths,
   links that lead out or into a hidden folder, `.obsidian/` and `.trash/` are refused. Only one note at a time is written,
-  moved or deleted; a folder is refused.
+  moved or deleted. The only folder a client can remove is an empty one (`delete_path`, a non-recursive `rmdir`; a
+  folder holding only hidden files such as `.DS_Store` is not empty), and never the vault root or one of the sync's
+  folders ([why](google-sync.md#task-lists-and-folders)).
 - **Health.** `GET /mcp/health` (with the token) reports `status`, the vault path, whether it exists and the number of open SSE
   sessions. The image's `HEALTHCHECK` calls it, so `docker ps` shows `healthy`.
 - **Token in the URL.** Some clients can only configure a URL (the "custom connector" form of Claude has just a name and a URL),

@@ -36,7 +36,7 @@ $ mcp get_vault_tree '{}'
 └── Welcome.md
 
 $ mcp move_note '{"from":"Projects/Plan.md","to":"Projects/Roadmap.md"}'
-Moved Projects/Plan.md → Projects/Roadmap.md. Updated 1 link in 1 note.
+Moved Projects/Plan.md → Projects/Roadmap.md. Updated 1 link in 1 note (previous versions copied to the trash).
 
 $ mcp get_path '{"path":"Welcome.md"}'
 # Welcome
@@ -49,8 +49,11 @@ Error accessing path: Security Error: Path traversal attempt detected ("../../et
 $ mcp get_path '{"path":".obsidian/plugins/obsidian-livesync/data.json"}'
 Error accessing path: Security Error: hidden files and folders are not reachable through this server (".obsidian/plugins/obsidian-livesync/data.json").
 
-$ mcp delete_note '{"path":"Welcome.md"}'
+$ mcp delete_path '{"path":"Welcome.md"}'
 Moved to trash: Welcome.md → .trash/2026-10-25T20-44-42-312Z__Welcome.md
+
+$ mcp delete_path '{"path":"Projects"}'
+Folder Projects is not empty (1 item): delete or move its notes and subfolders first
 ```
 
 ## Try the MCP server locally
@@ -170,7 +173,7 @@ it exists; the file is yours to write, and `MCP_INSTRUCTIONS` replaces or (`none
 | `write_note` | Creates a note and its folders; replaces one only with `overwrite: true`, old version to the trash | `{"path": "Inbox/Idea.md", "content": "# Idea"}` |
 | `edit_note` | Replaces a range of lines (`end_line = start_line - 1` inserts); old version copied to the trash | `{"path": "Inbox/Idea.md", "start_line": 1, "end_line": 1, "new_content": "# Better idea"}` |
 | `move_note` | Moves or renames a note and rewrites wikilinks and Markdown links to it; each rewritten note copied to the trash | `{"from": "Inbox/Idea.md", "to": "Projects/Idea.md"}` |
-| `delete_note` | Moves a note to `.trash/`; nothing is ever unlinked | `{"path": "Inbox/Idea.md"}` |
+| `delete_path` | Moves a note to `.trash/`, or removes a folder only while it is empty (never recursively); the vault root and the sync's folders are refused | `{"path": "Inbox/Idea.md"}` |
 
 ## How it works
 
@@ -182,7 +185,7 @@ the heaviest container, runs without the default seccomp profile, and needs a on
 
 **Two services, one lockfile.** `packages/mcp` (Express and the MCP SDK) and `packages/gcal-sync` (googleapis,
 node-cron) are npm workspaces. Each has its own image, built from the repository root. Settings both must read the same
-way (the trash folder, `TRASH_DIR`) live in a third workspace, `packages/shared`, built into both images. They also share
+way (the trash folder, `TRASH_DIR`, and the names of the sync's folders) live in a third workspace, `packages/shared`, built into both images. They also share
 a structured logger, kept as two identical files; CI fails if they differ.
 
 **The sync treats the vault as user data it must not lose.** Only front matter is synced, never the note body. Edits are
@@ -202,8 +205,13 @@ The design limits what such a client can do; it does not judge intent.
 - **Inside the vault, outside hidden folders.** Every client path goes through `resolveVaultPath()`: `..`, absolute
   paths and symbolic links that lead out of the vault (or dangle) are refused, and so is any path through a hidden folder.
   `.obsidian/` holds the LiveSync plugin's CouchDB password and plugin code that headless Obsidian would run.
-- **Nothing is destroyed.** Delete, overwrite, edit and the link rewrite of a move keep the previous version in `.trash/`. Tools act on one note at a
-  time and refuse folders. There is no shell, no recursive operation and no permanent delete.
+- **Nothing is destroyed.** Delete, overwrite, edit and the link rewrite of a move keep the previous version in `.trash/`.
+  The one thing removed outright is an empty folder, which holds nothing to lose: `delete_path` calls a plain,
+  non-recursive `rmdir`, which the kernel refuses for a folder with anything in it, hidden files included, so no
+  earlier check can go stale before the delete. The vault root and the folders the Google sync is built on (`{Tasks}`
+  and each list's folder, `{Calendar}` and its month folders, `04-Archive` and its mirrors, `_Systems`) are refused even
+  when empty. Tools act on one note or one empty folder at a time. There is no shell, no recursive operation and no
+  permanent delete of a note.
 - **Bounded.** At most 120 changes a minute for the whole server (`MCP_WRITE_LIMIT_PER_MINUTE`); request bodies up to
   5 MB (`MCP_BODY_LIMIT`).
 - **Logs without secrets.** Both services mask `?token=`, bearer tokens, OAuth parameters and secret-named fields at any
@@ -222,7 +230,8 @@ Reporting a vulnerability and what is in scope: [SECURITY.md](SECURITY.md).
 - **Fixed layout.** The sync's folders (`{Tasks}`, `{Calendar}`, `04-Archive`, `_Systems`) cannot be renamed.
 - **Moving a task between lists** deletes it in the old list and re-creates it in the new one, with a new Google id.
 - **Deleting a task folder deletes its Google list**, and a list deleted in Google sends its folder to `.trash/`;
-  see [docs/google-sync.md](docs/google-sync.md#task-lists-and-folders) for the guards.
+  see [docs/google-sync.md](docs/google-sync.md#task-lists-and-folders) for the guards. The MCP server never deletes a
+  list's folder, even an empty one: delete the list in Google Tasks.
 - **Headless Obsidian is not pinned** (`latest`), and needs its GUI once per new vault.
 - **No built-in backup.** What to back up is listed in [docs/operations.md](docs/operations.md#what-lives-where).
 
