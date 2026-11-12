@@ -1,10 +1,12 @@
 # obsidian-livesync
 
+[![CI](https://github.com/prod-explore/OBSIDIAN-LIVESYNC/actions/workflows/ci.yml/badge.svg)](https://github.com/prod-explore/OBSIDIAN-LIVESYNC/actions/workflows/ci.yml)
+
 A self-hosted Obsidian vault in one Docker Compose project: CouchDB keeps your devices in sync through the
 [Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync) plugin, an MCP server lets AI clients read and edit
 the notes over HTTPS, and a sync service keeps Google Calendar and Google Tasks in step with notes in the vault.
 
-I use it every day for my own vault, on a Raspberry Pi 5.
+I use it every day for my own vault, on a Raspberry Pi 5 with 8 GB of RAM.
 
 ```
  Obsidian on phone / laptop            AI client (Claude, …)                Google Calendar & Tasks
@@ -99,8 +101,6 @@ mcp get_path '{"path":"Welcome.md"}'
 Requirements: a Linux host with Docker Compose, a domain name, and a reverse proxy with TLS in front of the stack
 (an [nginx example](deploy/nginx-obsidian.conf.example) is included). No container publishes a port; the proxy reaches
 them over a shared Docker network.
-
-Runs on a Raspberry Pi 5 with 8 GB of RAM.
 
 **1. Configure.**
 
