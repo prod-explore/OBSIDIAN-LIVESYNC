@@ -246,7 +246,7 @@ npm run typecheck
 npm run test:coverage  # fails under the coverage floors in packages/*/.c8rc.json
 ```
 
-Tests run against real temporary vaults; the Google APIs are replaced by in-memory fakes
+There are 290+ tests. Tests run against real temporary vaults; the Google APIs are replaced by in-memory fakes
 (`packages/gcal-sync/src/__tests__/fakes.ts`). The MCP tests include a real HTTP server for authentication, transports
 and body limits.
 
